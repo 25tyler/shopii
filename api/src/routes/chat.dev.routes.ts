@@ -1,9 +1,9 @@
-// Development chat routes - uses real Claude AI
+// Development chat routes - uses OpenAI GPT
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.dev.js';
-import { generateChatResponse, detectIntent } from '../services/ai.claude.js';
+import { generateChatResponse, detectIntent } from '../services/ai.openai.js';
 
 const ChatMessageRequestSchema = z.object({
   message: z.string().min(1).max(2000),

@@ -1,5 +1,6 @@
-// Development server - uses real Claude AI with SQLite database
-import 'dotenv/config';
+// Development server - uses real GPT AI with SQLite database
+import dotenv from 'dotenv';
+dotenv.config({ override: true });
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { prisma } from './config/prisma.js';
@@ -102,7 +103,7 @@ try {
 ║                                                              ║
 ║   Server: http://${HOST}:${PORT}                              ║
 ║                                                              ║
-║   ✓ Real Claude AI responses                                 ║
+║   ✓ Real GPT-4o-mini AI responses                            ║
 ║   ✓ Mock authentication (auto-login as dev user)             ║
 ║   ✓ In-memory rate limiting (no Redis needed)                ║
 ║   ✓ SQLite database (no PostgreSQL needed)                   ║
