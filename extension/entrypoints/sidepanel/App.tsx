@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChatContainer } from '../../components/chat/ChatContainer';
 import { SuggestionsPage } from '../../components/suggestions/SuggestionsPage';
 import { OnboardingFlow } from '../../components/onboarding/OnboardingFlow';
@@ -8,7 +8,11 @@ type Tab = 'chat' | 'suggestions';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('chat');
-  const { isOnboarded, isLoading } = useUserStore();
+  const { isOnboarded, isLoading, initialize } = useUserStore();
+
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
 
   if (isLoading) {
     return (
