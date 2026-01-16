@@ -8,33 +8,20 @@ interface ChatContext {
   recentSearches?: string[];
 }
 
+// Categories we have products for
+const SUPPORTED_CATEGORIES = ['headphones', 'audio', 'laptop', 'computer', 'keyboard', 'mouse', 'monitor', 'peripherals'];
+
 // Mock responses based on query patterns
 const mockResponses: Record<string, string> = {
-  headphones: `Great choice looking for headphones! Based on my analysis of thousands of reviews across Reddit, YouTube, and expert sites, here are the top picks:
+  headphones: `Great choice looking for headphones! Based on my analysis of thousands of reviews across Reddit, YouTube, and expert sites, here are the top picks:`,
 
-**Sony WH-1000XM5** (AI Rating: 92/100)
-The current king of noise-cancelling headphones. Reddit users love the ANC and call quality improvements. Some note they don't fold flat like the XM4s.
+  laptop: `I've analyzed reviews from Reddit, YouTube, and tech experts for the best laptops. Here's what I found:`,
 
-**Apple AirPods Max** (AI Rating: 88/100)
-Premium build quality that Apple fans rave about. The price is steep, but the sound quality and seamless Apple ecosystem integration get high marks.
+  keyboard: `Looking for a keyboard! Based on r/MechanicalKeyboards and expert reviews, here are the top recommendations:`,
 
-**Bose QuietComfort Ultra** (AI Rating: 87/100)
-Legendary comfort that you can wear all day. The ANC is top-tier, though some audiophiles prefer the Sony's sound signature.
+  mouse: `I've gathered insights from Reddit and tech reviewers on the best mice available:`,
 
-Would you like me to compare any of these in more detail?`,
-
-  laptop: `I've analyzed reviews from Reddit, YouTube, and tech experts for the best laptops. Here's what I found:
-
-**MacBook Pro 14" M3** (AI Rating: 94/100)
-Incredible performance and battery life. Developers and creatives on Reddit consistently praise it. The only downside is the price point.
-
-**Dell XPS 15** (AI Rating: 89/100)
-Great Windows option with a beautiful display. Build quality is excellent, though some users report fan noise under load.
-
-**Framework Laptop 16** (AI Rating: 86/100)
-The repairable/upgradeable choice. Tech enthusiasts love the modularity. Battery life is good but not class-leading.
-
-What's your primary use case? I can narrow down the recommendations.`,
+  monitor: `Based on reviews from r/Monitors, RTINGS, and tech experts, here are the top displays:`,
 
   default: `I'd be happy to help you find the perfect product! Based on what you're looking for, I'll search through thousands of real user reviews from Reddit, YouTube, and expert sites to find the best options.
 
@@ -44,6 +31,14 @@ Could you tell me more about:
 3. Any specific features you need?
 
 This will help me give you more targeted recommendations backed by real user experiences!`,
+
+  no_products: `I don't have enough data on that product category yet. My database currently covers tech products like:
+
+• **Audio** - Headphones, earbuds, speakers
+• **Computing** - Laptops, keyboards, mice
+• **Displays** - Monitors, gaming displays
+
+Is there something in these categories I can help you find?`,
 };
 
 export async function detectIntent(message: string): Promise<SearchIntent> {
@@ -94,18 +89,24 @@ export async function generateChatResponse(
 
   const lowerMessage = message.toLowerCase();
 
-  // Check for specific product categories
+  // Determine category from message
+  let category: string | null = null;
   if (lowerMessage.includes('headphone') || lowerMessage.includes('earbuds') || lowerMessage.includes('audio')) {
-    return mockResponses.headphones!;
+    category = 'headphones';
+  } else if (lowerMessage.includes('laptop') || lowerMessage.includes('computer') || lowerMessage.includes('macbook')) {
+    category = 'laptop';
+  } else if (lowerMessage.includes('keyboard')) {
+    category = 'keyboard';
+  } else if (lowerMessage.includes('mouse')) {
+    category = 'mouse';
+  } else if (lowerMessage.includes('monitor') || lowerMessage.includes('display')) {
+    category = 'monitor';
   }
 
-  if (lowerMessage.includes('laptop') || lowerMessage.includes('computer') || lowerMessage.includes('macbook')) {
-    return mockResponses.laptop!;
-  }
-
-  // If we have products from the database, format a response with them
+  // If we have matching products, build response with them
   if (products.length > 0) {
-    let response = `Based on reviews from Reddit, YouTube, and expert sites, here are my top recommendations:\n\n`;
+    let response = mockResponses[category || 'default'] || mockResponses.default!;
+    response += '\n\n';
 
     for (const product of products.slice(0, 3)) {
       response += `**${product.name}** (AI Rating: ${product.rating?.aiRating || 'N/A'}/100)\n`;
@@ -126,8 +127,14 @@ export async function generateChatResponse(
     return response;
   }
 
-  // Default response
-  return mockResponses.default!;
+  // No products found - check if it's a category we don't support
+  if (category === null) {
+    // Unknown category like "vitamin D supplement"
+    return mockResponses.no_products!;
+  }
+
+  // Known category but no products in DB
+  return mockResponses[category] + '\n\n*No products found in this category yet. Try searching for headphones, laptops, or keyboards!*';
 }
 
 export async function generateProductSummary(

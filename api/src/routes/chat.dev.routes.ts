@@ -1,9 +1,9 @@
-// Development chat routes - uses mock AI
+// Development chat routes - uses real Claude AI
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.dev.js';
-import { generateChatResponse, detectIntent } from '../services/ai.mock.js';
+import { generateChatResponse, detectIntent } from '../services/ai.claude.js';
 
 const ChatMessageRequestSchema = z.object({
   message: z.string().min(1).max(2000),
@@ -81,15 +81,71 @@ export async function devChatRoutes(fastify: FastifyInstance) {
       // Search for relevant products if it's a product search
       let products: any[] = [];
       if (intent.type === 'product_search' || intent.type === 'comparison') {
-        products = await prisma.product.findMany({
-          take: 5,
-          include: {
-            rating: true,
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-        });
+        // Extract search terms from message
+        const searchTerms = message.toLowerCase();
+
+        // Build search conditions based on message content (lowercase to match DB)
+        const categoryMap: Record<string, string[]> = {
+          'headphone': ['audio', 'Audio'],
+          'earbuds': ['audio', 'Audio'],
+          'audio': ['audio', 'Audio'],
+          'speaker': ['audio', 'Audio'],
+          'laptop': ['computing', 'Computing'],
+          'computer': ['computing', 'Computing'],
+          'macbook': ['computing', 'Computing'],
+          'keyboard': ['peripherals', 'Peripherals'],
+          'mouse': ['peripherals', 'Peripherals'],
+          'monitor': ['monitors', 'Monitors'],
+          'display': ['monitors', 'Monitors'],
+        };
+
+        let matchedCategories: string[] = [];
+        for (const [keyword, categories] of Object.entries(categoryMap)) {
+          if (searchTerms.includes(keyword)) {
+            matchedCategories.push(...categories);
+          }
+        }
+
+        // Search products by category or name
+        if (matchedCategories.length > 0) {
+          products = await prisma.product.findMany({
+            where: {
+              category: { in: matchedCategories },
+            },
+            take: 5,
+            include: {
+              rating: true,
+            },
+            orderBy: {
+              createdAt: 'desc',
+            },
+          });
+        }
+
+        // If no category match, try text search on name
+        if (products.length === 0) {
+          products = await prisma.product.findMany({
+            where: {
+              OR: [
+                { name: { contains: message } },
+                { description: { contains: message } },
+              ],
+            },
+            take: 5,
+            include: {
+              rating: true,
+            },
+            orderBy: {
+              createdAt: 'desc',
+            },
+          });
+        }
+
+        // Fallback: return empty if no match (better than random products)
+        if (products.length === 0 && !matchedCategories.length) {
+          // No matching products for this query
+          products = [];
+        }
 
         // Parse JSON arrays for SQLite
         products = products.map((p) => ({

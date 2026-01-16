@@ -1,4 +1,5 @@
-// Development server - uses mocks instead of external services
+// Development server - uses real Claude AI with SQLite database
+import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { prisma } from './config/prisma.js';
@@ -101,7 +102,7 @@ try {
 ║                                                              ║
 ║   Server: http://${HOST}:${PORT}                              ║
 ║                                                              ║
-║   ✓ Mock AI responses (no API key needed)                    ║
+║   ✓ Real Claude AI responses                                 ║
 ║   ✓ Mock authentication (auto-login as dev user)             ║
 ║   ✓ In-memory rate limiting (no Redis needed)                ║
 ║   ✓ SQLite database (no PostgreSQL needed)                   ║
