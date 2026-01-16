@@ -1,0 +1,230 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// Users (synced with Supabase Auth)
+model User {
+  id               String   @id // matches Supabase auth.users.id
+  email            String   @unique
+  name             String?
+  avatarUrl        String?  @map("avatar_url")
+  plan             String   @default("free")
+  stripeCustomerId String?  @unique @map("stripe_customer_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+
+  preferences   UserPreferences?
+  interactions  UserInteraction[]
+  conversations Conversation[]
+  clicks        AffiliateClick[]
+  subscription  Subscription?
+  usageTracking UsageTracking[]
+
+  @@map("users")
+}
+
+model UserPreferences {
+  userId            String @id @map("user_id")
+  categories        String @default("[]") // JSON array stored as string for SQLite
+  budgetMin         Int    @default(0) @map("budget_min")
+  budgetMax         Int    @default(1000) @map("budget_max")
+  currency          String @default("USD")
+  qualityPreference String @default("mid-range") @map("quality_preference")
+  brandPreferences  String @default("[]") @map("brand_preferences") // JSON array
+  brandExclusions   String @default("[]") @map("brand_exclusions") // JSON array
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model UserInteraction {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  productId       String?  @map("product_id")
+  interactionType String   @map("interaction_type")
+  context         String?  // JSON stored as string
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@index([userId])
+  @@index([productId])
+  @@map("user_interactions")
+}
+
+// Products
+model Product {
+  id            String    @id @default(uuid())
+  externalId    String?   @map("external_id")
+  retailer      String
+  name          String
+  description   String?
+  imageUrl      String?   @map("image_url")
+  category      String?
+  brand         String?
+  currentPrice  Float?    @map("current_price")
+  currency      String    @default("USD")
+  affiliateUrl  String?   @map("affiliate_url")
+  metadata      String?   // JSON stored as string
+  lastScrapedAt DateTime? @map("last_scraped_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  rating           ProductRating?
+  reviewSources    ReviewSource[]
+  interactions     UserInteraction[]
+  clicks           AffiliateClick[]
+  sponsoredProduct SponsoredProduct?
+
+  @@unique([externalId, retailer])
+  @@index([category])
+  @@index([retailer])
+  @@map("products")
+}
+
+model ProductRating {
+  productId        String   @id @map("product_id")
+  aiRating         Int?     @map("ai_rating")
+  confidence       Float?
+  sentimentScore   Float?   @map("sentiment_score")
+  reliabilityScore Float?   @map("reliability_score")
+  valueScore       Float?   @map("value_score")
+  popularityScore  Float?   @map("popularity_score")
+  sourcesAnalyzed  Int      @default(0) @map("sources_analyzed")
+  pros             String   @default("[]") // JSON array
+  cons             String   @default("[]") // JSON array
+  summary          String?
+  calculatedAt     DateTime @default(now()) @map("calculated_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_ratings")
+}
+
+model ReviewSource {
+  id                 String   @id @default(uuid())
+  productId          String   @map("product_id")
+  sourceType         String   @map("source_type")
+  sourceUrl          String   @unique @map("source_url")
+  sourceName         String?  @map("source_name")
+  rawContent         String?  @map("raw_content")
+  extractedSentiment Float?   @map("extracted_sentiment")
+  extractedPros      String   @default("[]") @map("extracted_pros") // JSON array
+  extractedCons      String   @default("[]") @map("extracted_cons") // JSON array
+  upvotes            Int?
+  commentCount       Int?     @map("comment_count")
+  scrapedAt          DateTime @default(now()) @map("scraped_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("review_sources")
+}
+
+// Conversations
+model Conversation {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  title       String   @default("New Chat")
+  pageContext String?  @map("page_context") // JSON stored as string
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([userId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  role           String
+  content        String
+  productsShown  String   @default("[]") @map("products_shown") // JSON array
+  metadata       String?  // JSON stored as string
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("messages")
+}
+
+// Monetization
+model AffiliateClick {
+  id               String   @id @default(uuid())
+  userId           String?  @map("user_id")
+  productId        String?  @map("product_id")
+  affiliateNetwork String?  @map("affiliate_network")
+  clickUrl         String?  @map("click_url")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  user    User?    @relation(fields: [userId], references: [id])
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@index([userId])
+  @@map("affiliate_clicks")
+}
+
+model SponsoredProduct {
+  id                  String   @id @default(uuid())
+  productId           String   @unique @map("product_id")
+  campaignName        String?  @map("campaign_name")
+  bidAmount           Float?   @map("bid_amount")
+  dailyBudget         Float?   @map("daily_budget")
+  spent               Float    @default(0)
+  targetingCategories String   @default("[]") @map("targeting_categories") // JSON array
+  isActive            Boolean  @default(true) @map("is_active")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id])
+
+  impressions AdImpression[]
+
+  @@map("sponsored_products")
+}
+
+model AdImpression {
+  id                 String   @id @default(uuid())
+  sponsoredProductId String   @map("sponsored_product_id")
+  userId             String?  @map("user_id")
+  placement          String?
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  sponsoredProduct SponsoredProduct @relation(fields: [sponsoredProductId], references: [id])
+
+  @@map("ad_impressions")
+}
+
+model Subscription {
+  id                   String   @id @default(uuid())
+  userId               String   @unique @map("user_id")
+  stripeSubscriptionId String   @unique @map("stripe_subscription_id")
+  plan                 String
+  status               String
+  currentPeriodEnd     DateTime @map("current_period_end")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("subscriptions")
+}
+
+model UsageTracking {
+  userId      String   @map("user_id")
+  date        DateTime
+  searchCount Int      @default(0) @map("search_count")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@id([userId, date])
+  @@map("usage_tracking")
+}

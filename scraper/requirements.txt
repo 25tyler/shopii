@@ -1,0 +1,29 @@
+# Core
+celery[redis]==5.4.0
+redis==5.2.0
+
+# Database
+psycopg2-binary==2.9.10
+sqlalchemy==2.0.36
+
+# Scraping
+playwright==1.49.0
+praw==7.8.1
+beautifulsoup4==4.12.3
+lxml==5.3.0
+httpx==0.28.1
+
+# AI
+anthropic==0.40.0
+
+# YouTube
+google-api-python-client==2.154.0
+
+# Utilities
+python-dotenv==1.0.1
+pydantic==2.10.2
+pydantic-settings==2.6.1
+
+# Dev
+pytest==8.3.4
+pytest-asyncio==0.24.0

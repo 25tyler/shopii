@@ -1,0 +1,99 @@
+// User types
+export interface User {
+  id: string;
+  email: string;
+  name?: string;
+  avatarUrl?: string;
+  plan: 'guest' | 'free' | 'pro';
+  createdAt: string;
+}
+
+export interface UserPreferences {
+  categories: string[];
+  budgetRange: {
+    min: number;
+    max: number;
+    currency: string;
+  };
+  qualityPreference: 'budget' | 'mid-range' | 'premium';
+  brandPreferences: string[];
+  brandExclusions: string[];
+}
+
+// Chat types
+export interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+  products?: ProductCard[];
+  isLoading?: boolean;
+}
+
+export interface Conversation {
+  id: string;
+  title: string;
+  messages: Message[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+// Product types
+export interface ProductCard {
+  id: string;
+  name: string;
+  description: string;
+  imageUrl: string;
+  price: {
+    amount: number;
+    currency: string;
+  };
+  aiRating: number;
+  confidence: number;
+  pros: string[];
+  cons: string[];
+  affiliateUrl: string;
+  retailer: string;
+  isSponsored?: boolean;
+}
+
+export interface ProductRating {
+  overall: number;
+  sentiment: number;
+  reliability: number;
+  value: number;
+  popularity: number;
+  confidence: number;
+  sourcesAnalyzed: number;
+}
+
+// API types
+export interface ChatRequest {
+  message: string;
+  conversationId?: string;
+  pageContext?: PageContext;
+}
+
+export interface ChatResponse {
+  message: string;
+  products?: ProductCard[];
+  conversationId: string;
+}
+
+export interface PageContext {
+  url: string;
+  title: string;
+  productName?: string;
+  price?: string;
+  imageUrl?: string;
+  retailer?: string;
+}
+
+// Search types
+export interface SearchFilters {
+  query: string;
+  category?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  minRating?: number;
+}
