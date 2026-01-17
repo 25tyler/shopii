@@ -55,6 +55,12 @@ const COMMUNITY_DOMAINS = [
   'thefedoralounge.com', // Vintage fashion, hats
   'denimio.com', // Raw denim
   'rawrdenim.com', // Denim reviews
+  'heddels.com', // Raw denim and workwear
+  'putthison.com', // Quality menswear
+  'dieworkwear.com', // Quality basics and workwear
+  'permanentstyle.com', // Classic menswear
+  'ironheart.co.uk/forum', // Heavy denim
+  'supertalk.superfuture.com', // Streetwear and fashion
 
   // Outdoor & Sports
   'backpackinglight.com', // Ultralight hiking gear
@@ -101,6 +107,7 @@ const COMMUNITY_DOMAINS = [
 
 // Expert review sites (separate from forums - these have professional reviews)
 const EXPERT_REVIEW_DOMAINS = [
+  // Tech
   'wirecutter.com',
   'rtings.com',
   'cnet.com',
@@ -109,29 +116,173 @@ const EXPERT_REVIEW_DOMAINS = [
   'pcmag.com',
   'theverge.com',
   'engadget.com',
+  // Outdoor
   'outdoorgearlab.com',
+  'switchbacktravel.com',
+  'cleverhiker.com',
   'runnersworld.com',
   'bicycling.com',
+  // Home & Kitchen
   'seriouseats.com',
   'americastestkitchen.com',
+  'consumerreports.org',
+  // Fashion & Lifestyle
+  'gearpatrol.com',
+  'gq.com',
+  'esquire.com',
+  'menshealth.com',
+  'highsnobiety.com',
+  'hypebeast.com',
 ];
+
+// Detect category from query to customize search approach
+function detectQueryCategory(query: string): 'tech' | 'fashion' | 'home' | 'outdoor' | 'fitness' | 'general' {
+  const q = query.toLowerCase();
+
+  // Fashion/Apparel keywords
+  if (q.match(/\b(shirt|tee|t-shirt|pants|jeans|sweatpants|hoodie|jacket|coat|shoes|boots|sneakers|dress|clothing|apparel|wear|denim|cotton|wool|cashmere|leather)\b/)) {
+    return 'fashion';
+  }
+
+  // Tech keywords
+  if (q.match(/\b(headphones|earbuds|laptop|phone|monitor|keyboard|mouse|speaker|camera|tv|computer|pc|gaming|audio|wireless|bluetooth)\b/)) {
+    return 'tech';
+  }
+
+  // Home/Kitchen keywords
+  if (q.match(/\b(kitchen|cookware|pan|pot|knife|appliance|vacuum|mattress|pillow|sheets|furniture|blender|coffee|espresso)\b/)) {
+    return 'home';
+  }
+
+  // Outdoor/Sports keywords
+  if (q.match(/\b(hiking|camping|backpack|tent|bike|cycling|running|fitness|gym|outdoor|trail|climbing)\b/)) {
+    return 'outdoor';
+  }
+
+  // Fitness keywords
+  if (q.match(/\b(workout|exercise|protein|supplement|weights|yoga|gym equipment)\b/)) {
+    return 'fitness';
+  }
+
+  return 'general';
+}
+
+// Generate search queries tailored to the category
+function generateSearchQueries(query: string, category: string): string[] {
+  switch (category) {
+    case 'fashion':
+      return [
+        // Fashion-specific subreddits and language
+        `${query} site:reddit.com/r/malefashionadvice OR site:reddit.com/r/frugalmalefashion`,
+        `${query} reddit "go-to" OR "favorite" OR "love these"`,
+        `${query} reddit "quality" OR "well made" OR "holds up"`,
+        `best ${query} "buy it for life" OR "worth the money"`,
+        `${query} styleforum OR heddels recommendation`,
+        `${query} review "comfortable" OR "fits great" OR "perfect"`,
+        // Brand discovery
+        `${query} reddit "underrated" OR "hidden gem" OR "slept on"`,
+      ];
+
+    case 'tech':
+      return [
+        // Tech-specific language
+        `${query} reddit "best" OR "highly recommend" OR "can't go wrong"`,
+        `${query} reddit "gold standard" OR "hands down" OR "no contest"`,
+        `${query} site:reddit.com megathread OR guide`,
+        `${query} head-fi OR audiosciencereview recommendation`,
+        `${query} "worth every penny" OR "best in class"`,
+        `${query} comparison "winner" OR "beats" OR "nothing comes close"`,
+      ];
+
+    case 'home':
+      return [
+        `${query} reddit "game changer" OR "life changing" OR "best purchase"`,
+        `${query} site:reddit.com/r/BuyItForLife OR site:reddit.com/r/cookware`,
+        `${query} "worth the investment" OR "buy once"`,
+        `best ${query} wirecutter OR serious eats`,
+        `${query} review "durable" OR "well built" OR "quality"`,
+      ];
+
+    case 'outdoor':
+      return [
+        `${query} reddit "trust my life" OR "never failed" OR "bombproof"`,
+        `${query} site:reddit.com/r/CampingGear OR site:reddit.com/r/ultralight`,
+        `${query} backpackinglight recommendation`,
+        `best ${query} outdoorgearlab OR switchbacktravel`,
+        `${query} "tried and true" OR "go-to" OR "workhorse"`,
+      ];
+
+    case 'fitness':
+      return [
+        `${query} reddit "gains" OR "results" OR "works great"`,
+        `${query} site:reddit.com/r/fitness OR site:reddit.com/r/homegym`,
+        `best ${query} "bang for buck" OR "worth it"`,
+        `${query} review bodybuilding OR t-nation`,
+      ];
+
+    default:
+      return [
+        `${query} reddit "best" OR "highly recommend"`,
+        `${query} reddit "buy it for life" OR "worth every penny"`,
+        `best ${query} forum recommendation`,
+        `${query} "the best" OR "my favorite" OR "go-to"`,
+        `${query} comparison review`,
+      ];
+  }
+}
+
+// Get category-specific scoring signals
+function getCategoryScoringSignals(category: string): { phrases: string[], weight: number }[] {
+  const baseSignals = [
+    { phrases: ['best', 'highly recommend'], weight: 3 },
+    { phrases: ['buy it for life', 'worth every penny'], weight: 4 },
+  ];
+
+  switch (category) {
+    case 'fashion':
+      return [
+        ...baseSignals,
+        { phrases: ['go-to', 'favorite', 'love these', 'perfect fit'], weight: 4 },
+        { phrases: ['quality', 'well made', 'holds up', 'comfortable'], weight: 3 },
+        { phrases: ['underrated', 'hidden gem', 'slept on'], weight: 3 },
+      ];
+
+    case 'tech':
+      return [
+        ...baseSignals,
+        { phrases: ['gold standard', 'hands down', 'no contest'], weight: 4 },
+        { phrases: ['best in class', 'nothing comes close'], weight: 4 },
+      ];
+
+    case 'home':
+      return [
+        ...baseSignals,
+        { phrases: ['game changer', 'life changing', 'best purchase'], weight: 4 },
+        { phrases: ['durable', 'well built', 'buy once'], weight: 3 },
+      ];
+
+    case 'outdoor':
+      return [
+        ...baseSignals,
+        { phrases: ['bombproof', 'never failed', 'trust my life'], weight: 4 },
+        { phrases: ['tried and true', 'workhorse'], weight: 3 },
+      ];
+
+    default:
+      return baseSignals;
+  }
+}
 
 // Step 1: Search Reddit/forums for what people actually recommend
 export async function searchForRecommendations(query: string): Promise<ResearchResult> {
   const client = getTavily();
 
-  // More targeted search queries - focus on finding actual "best" recommendations
-  const searchQueries = [
-    // Reddit-specific searches for strong recommendations
-    `"${query}" site:reddit.com "best" OR "highly recommend" OR "can't go wrong"`,
-    `${query} reddit "buy it for life" OR "worth every penny" OR "top pick"`,
-    `${query} reddit megathread OR guide OR recommendation`,
-    // Forum-specific searches
-    `best ${query} forum "hands down" OR "no contest" OR "gold standard"`,
-    `${query} enthusiast recommendation "the best" OR "my favorite"`,
-    // Comparative searches
-    `${query} comparison "winner" OR "beats" OR "nothing comes close"`,
-  ];
+  // Detect category and generate tailored queries
+  const category = detectQueryCategory(query);
+  const searchQueries = generateSearchQueries(query, category);
+  const scoringSignals = getCategoryScoringSignals(category);
+
+  console.log(`Detected category: ${category}, using ${searchQueries.length} tailored queries`);
 
   const allResults: Array<{ title: string; url: string; content: string; score: number }> = [];
   const seenUrls = new Set<string>();
@@ -152,16 +303,20 @@ export async function searchForRecommendations(query: string): Promise<ResearchR
           if (seenUrls.has(result.url)) continue;
           seenUrls.add(result.url);
 
-          // Score results based on relevance signals
+          // Score results based on category-specific signals
           let score = 0;
           const contentLower = result.content.toLowerCase();
           const titleLower = result.title.toLowerCase();
 
-          // Strong recommendation signals
-          if (contentLower.includes('best') || contentLower.includes('highly recommend')) score += 3;
-          if (contentLower.includes('gold standard') || contentLower.includes('buy it for life')) score += 4;
-          if (contentLower.includes('hands down') || contentLower.includes('no contest')) score += 4;
-          if (contentLower.includes('worth every penny') || contentLower.includes('can\'t go wrong')) score += 3;
+          // Apply category-specific scoring signals
+          for (const signal of scoringSignals) {
+            for (const phrase of signal.phrases) {
+              if (contentLower.includes(phrase)) {
+                score += signal.weight;
+                break; // Only count each signal group once
+              }
+            }
+          }
 
           // Reddit-specific signals
           if (result.url.includes('reddit.com')) {
@@ -169,9 +324,16 @@ export async function searchForRecommendations(query: string): Promise<ResearchR
             if (titleLower.includes('guide') || titleLower.includes('megathread')) score += 3;
           }
 
-          // Expert forum signals
-          if (result.url.includes('head-fi.org') || result.url.includes('styleforum.net')) score += 2;
-          if (result.url.includes('audiosciencereview') || result.url.includes('rtings')) score += 3;
+          // Expert forum signals (category-aware)
+          if (category === 'tech') {
+            if (result.url.includes('head-fi.org') || result.url.includes('audiosciencereview')) score += 3;
+          } else if (category === 'fashion') {
+            if (result.url.includes('styleforum.net') || result.url.includes('heddels.com')) score += 3;
+          } else if (category === 'home') {
+            if (result.url.includes('home-barista.com') || result.url.includes('cookingforums')) score += 3;
+          } else if (category === 'outdoor') {
+            if (result.url.includes('backpackinglight.com') || result.url.includes('mtbr.com')) score += 3;
+          }
 
           allResults.push({
             title: result.title,
