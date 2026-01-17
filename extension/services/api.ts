@@ -182,9 +182,10 @@ class ApiClient {
         name: string;
         description: string;
         imageUrl: string;
-        price: { amount: number; currency: string };
+        price: { amount: number | null; currency: string };
         aiRating: number | null;
         confidence: number | null;
+        matchScore: number | null;
         pros: string[];
         cons: string[];
         affiliateUrl: string;

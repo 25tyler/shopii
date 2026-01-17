@@ -52,7 +52,7 @@ export function ProductCardComponent({ product }: ProductCardProps) {
             <RatingBadge rating={product.aiRating} size="sm" />
           </div>
           <p className="text-lg font-semibold text-white mt-1">
-            ${product.price.amount.toFixed(2)}
+            {product.price.amount !== null ? `$${product.price.amount.toFixed(2)}` : 'Price varies'}
           </p>
           <p className="text-xs text-slate-400">{product.retailer}</p>
         </div>

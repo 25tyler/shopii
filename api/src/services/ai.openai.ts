@@ -132,15 +132,74 @@ export async function detectIntent(message: string): Promise<SearchIntent> {
     /suggestions? for/i,
   ];
 
-  const comparisonPatterns = [/vs\.?/i, /versus/i, /compare/i, /better/i, /difference between/i, /or\s+the/i];
+  // Product category keywords - if message contains these, it's likely a product search
+  const productCategoryKeywords = [
+    'laptop', 'computer', 'macbook', 'pc',
+    'headphone', 'earbuds', 'speaker', 'audio',
+    'keyboard', 'mouse', 'monitor', 'display',
+    'chair', 'desk', 'furniture',
+    'phone', 'tablet', 'ipad', 'iphone', 'android',
+    'camera', 'lens', 'tripod',
+    'tv', 'television', 'projector',
+    'watch', 'smartwatch', 'fitbit',
+    'shoes', 'sneakers', 'boots',
+    'bag', 'backpack', 'luggage',
+    'mattress', 'pillow', 'bed',
+    'cookware', 'pan', 'pot', 'knife',
+    'blender', 'mixer', 'appliance',
+    'vacuum', 'robot',
+    'bike', 'bicycle', 'scooter',
+    'coffee', 'espresso', 'grinder',
+    'protein', 'supplement', 'vitamin',
+    'drink', 'beverage', 'juice',
+    'skincare', 'moisturizer', 'sunscreen',
+    'toothbrush', 'shaver', 'razor',
+    'router', 'modem', 'wifi',
+    'gpu', 'graphics card', 'cpu', 'processor',
+    'ssd', 'hard drive', 'storage',
+    'printer', 'scanner',
+    'gaming', 'console', 'controller',
+  ];
 
-  const questionPatterns = [/what is/i, /how does/i, /should i/i, /is it worth/i, /tell me about/i];
+  const comparisonPatterns = [/vs\.?/i, /versus/i, /compare/i, /difference between/i, /or\s+the/i];
+
+  const questionPatterns = [/what is/i, /how does/i, /is it worth/i, /tell me about/i];
+
+  // Non-product patterns - don't treat these as product searches
+  const nonProductPatterns = [
+    /^(hi|hello|hey|thanks|thank you|ok|okay|sure|yes|no|bye|goodbye)/i,
+    /how are you/i,
+    /what can you do/i,
+    /help me understand/i,
+  ];
+
+  // Skip if it's just a greeting or non-product message
+  if (nonProductPatterns.some((p) => p.test(lowerMessage))) {
+    return { type: 'general_chat' };
+  }
 
   if (comparisonPatterns.some((p) => p.test(lowerMessage))) {
     return { type: 'comparison' };
   }
 
+  // Check explicit product search patterns first
   if (productSearchPatterns.some((p) => p.test(lowerMessage))) {
+    const priceMatch = lowerMessage.match(/under\s*\$?(\d+)/i) || lowerMessage.match(/\$(\d+)\s*-\s*\$?(\d+)/i);
+    const priceRange = priceMatch
+      ? {
+          min: priceMatch[2] ? parseInt(priceMatch[1]!) : 0,
+          max: parseInt(priceMatch[2] || priceMatch[1]!),
+        }
+      : undefined;
+
+    return {
+      type: 'product_search',
+      priceRange,
+    };
+  }
+
+  // Check if message contains product category keywords - treat as product search
+  if (productCategoryKeywords.some((keyword) => lowerMessage.includes(keyword))) {
     const priceMatch = lowerMessage.match(/under\s*\$?(\d+)/i) || lowerMessage.match(/\$(\d+)\s*-\s*\$?(\d+)/i);
     const priceRange = priceMatch
       ? {

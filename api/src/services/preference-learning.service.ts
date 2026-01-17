@@ -228,18 +228,68 @@ export async function getLearnedPreferences(userId: string): Promise<{
   }
 }
 
-// Get top categories for suggestions
+// Calculate a recency-weighted score for sorting
+// This heavily prioritizes recent interests - recency is MORE important than weight
+function getRecencyScore(weight: number, lastSeen: string): number {
+  const now = Date.now();
+  const lastSeenTime = new Date(lastSeen).getTime();
+  const minutesSince = (now - lastSeenTime) / (1000 * 60);
+
+  // Recency is the PRIMARY factor, weight is secondary
+  // Base score starts high for recent items and decays
+  let recencyScore: number;
+
+  if (minutesSince < 5) {
+    // Last 5 minutes - highest priority (1000 base)
+    recencyScore = 1000;
+  } else if (minutesSince < 30) {
+    // Last 30 minutes - very high priority (500 base)
+    recencyScore = 500;
+  } else if (minutesSince < 60) {
+    // Last hour - high priority (200 base)
+    recencyScore = 200;
+  } else if (minutesSince < 60 * 24) {
+    // Last 24 hours - medium priority (50 base)
+    recencyScore = 50;
+  } else {
+    // Older - weight matters more
+    recencyScore = 10;
+  }
+
+  // Add weight as a smaller component (0-100 range)
+  return recencyScore + (weight * 0.5);
+}
+
+// Get top categories for suggestions - prioritizes recent interests
 export function getTopCategories(categories: LearnedCategory[], limit: number = 5): string[] {
   return categories
-    .sort((a, b) => b.weight - a.weight)
+    .map(c => ({ ...c, score: getRecencyScore(c.weight, c.lastSeen) }))
+    .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map((c) => c.category);
 }
 
-// Get top brands for suggestions
+// Get top brands for suggestions - prioritizes recent interests
 export function getTopBrands(brands: LearnedBrand[], limit: number = 5): string[] {
   return brands
-    .sort((a, b) => b.weight - a.weight)
+    .map(b => ({ ...b, score: getRecencyScore(b.weight, b.lastSeen) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((b) => b.brand);
+}
+
+// Get categories sorted by recency (most recent first)
+export function getMostRecentCategories(categories: LearnedCategory[], limit: number = 5): string[] {
+  return categories
+    .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime())
+    .slice(0, limit)
+    .map((c) => c.category);
+}
+
+// Get brands sorted by recency (most recent first)
+export function getMostRecentBrands(brands: LearnedBrand[], limit: number = 5): string[] {
+  return brands
+    .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime())
     .slice(0, limit)
     .map((b) => b.brand);
 }

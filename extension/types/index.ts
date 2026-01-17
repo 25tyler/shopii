@@ -45,7 +45,7 @@ export interface ProductCard {
   description: string;
   imageUrl: string;
   price: {
-    amount: number;
+    amount: number | null; // null when price not known (shows "Price varies")
     currency: string;
   };
   aiRating: number; // General product quality (0-100)

@@ -45,11 +45,12 @@ export function SuggestionsPage() {
         description: p.description,
         imageUrl: p.imageUrl,
         price: {
-          amount: p.price.amount || 0,
+          amount: p.price.amount, // Keep null for "Price varies" display
           currency: p.price.currency,
         },
         aiRating: p.aiRating || 0,
         confidence: p.confidence || 0,
+        matchScore: 75, // Default matchScore for suggestions
         pros: p.pros,
         cons: p.cons,
         affiliateUrl: p.affiliateUrl,
@@ -109,6 +110,9 @@ export function SuggestionsPage() {
   };
 
   const handleRefresh = () => {
+    // Clear products first to show loading state
+    setProducts([]);
+    setLoading(true);
     loadSuggestions(1);
   };
 
