@@ -316,6 +316,19 @@ Write a helpful response that:
 4. End with a follow-up question
 
 Do NOT list products that aren't in the verified list above.`;
+  } else {
+    // No products found - tell AI to be honest about it
+    systemPrompt += `
+
+IMPORTANT: Our research didn't find strongly-endorsed specific products for this query. Do NOT make up or suggest specific product names.
+
+Instead:
+1. Acknowledge that you searched but didn't find well-reviewed specific products
+2. Explain what to look for when shopping for this category (features, materials, things to avoid)
+3. Suggest the user try a more specific query or ask about a particular brand
+4. Keep the response helpful but honest
+
+Do NOT list specific product names or brands as recommendations.`;
   }
 
   const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
