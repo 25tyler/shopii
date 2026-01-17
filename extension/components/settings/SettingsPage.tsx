@@ -30,13 +30,34 @@ export function SettingsPage({ initialTab = 'account' }: SettingsPageProps) {
     return () => window.removeEventListener('switchToUpgrade', handleSwitchToUpgrade);
   }, []);
 
+  // If not logged in, just show auth section without tabs
+  if (!user) {
+    return (
+      <div className="h-full overflow-y-auto bg-background-primary">
+        {/* Header */}
+        <div className="sticky top-0 bg-glass backdrop-blur-lg border-b border-border-light px-6 py-5 z-10 shadow-glass-sm">
+          <h1 className="text-2xl font-light text-text-primary mb-1">Sign In</h1>
+          <p className="text-sm text-text-secondary">
+            Sign in to unlock more features
+          </p>
+        </div>
+
+        {/* Content */}
+        <div className="px-6 py-6">
+          <AuthSection />
+        </div>
+      </div>
+    );
+  }
+
+  // Logged in - show tabs
   return (
     <div className="h-full overflow-y-auto bg-background-primary">
       {/* Header */}
       <div className="sticky top-0 bg-glass backdrop-blur-lg border-b border-border-light px-6 py-5 z-10 shadow-glass-sm">
         <h1 className="text-2xl font-light text-text-primary mb-1">Settings</h1>
         <p className="text-sm text-text-secondary">
-          {user ? `Manage your account and preferences` : 'Sign in to unlock more features'}
+          Manage your account and preferences
         </p>
       </div>
 
@@ -53,23 +74,19 @@ export function SettingsPage({ initialTab = 'account' }: SettingsPageProps) {
             active={activeTab === 'preferences'}
             onClick={() => setActiveTab('preferences')}
           />
-          {user && (
-            <TabButton
-              label="Upgrade"
-              active={activeTab === 'upgrade'}
-              onClick={() => setActiveTab('upgrade')}
-            />
-          )}
+          <TabButton
+            label="Upgrade"
+            active={activeTab === 'upgrade'}
+            onClick={() => setActiveTab('upgrade')}
+          />
         </div>
       </div>
 
       {/* Content */}
       <div className="px-6 py-6">
-        {activeTab === 'account' && (
-          user ? <AccountSection /> : <AuthSection />
-        )}
+        {activeTab === 'account' && <AccountSection />}
         {activeTab === 'preferences' && <PreferencesSection />}
-        {activeTab === 'upgrade' && user && <UpgradeSection />}
+        {activeTab === 'upgrade' && <UpgradeSection />}
       </div>
     </div>
   );
