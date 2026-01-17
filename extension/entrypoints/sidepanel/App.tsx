@@ -29,6 +29,18 @@ export default function App() {
     }
   }, [user]);
 
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    if (showSettingsModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showSettingsModal]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full bg-background-primary">
@@ -152,10 +164,17 @@ export default function App() {
 
       {/* Settings Modal - Using portal to render at body level */}
       {showSettingsModal && createPortal(
-        <div className="fixed inset-0 z-[999999]" style={{ isolation: 'isolate' }}>
+        <div
+          className="fixed inset-0 z-[999999]"
+          style={{ isolation: 'isolate' }}
+          onWheel={(e) => e.stopPropagation()}
+        >
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setShowSettingsModal(false)} />
           <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
-            <div className="relative w-full max-w-3xl max-h-[90vh] bg-background-primary rounded-2xl shadow-2xl overflow-hidden animate-slide-up pointer-events-auto">
+            <div
+              className="relative w-full max-w-3xl max-h-[90vh] bg-background-primary rounded-2xl shadow-2xl overflow-hidden animate-slide-up pointer-events-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
               {/* Close Button */}
               <button
                 onClick={() => setShowSettingsModal(false)}
@@ -166,8 +185,10 @@ export default function App() {
                 </svg>
               </button>
 
-              {/* Settings Page with initial tab */}
-              <SettingsPageWrapper initialTab={settingsTab} />
+              {/* Scrollable Content Wrapper */}
+              <div className="overflow-y-auto max-h-[90vh]">
+                <SettingsPageWrapper initialTab={settingsTab} />
+              </div>
             </div>
           </div>
         </div>,

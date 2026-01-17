@@ -55,7 +55,7 @@ export function AuthSection() {
           onClick={() => setMode('signin')}
           className={`flex-1 py-2 px-4 rounded-xl text-sm font-medium transition-all ${
             mode === 'signin'
-              ? 'bg-background-secondary text-text-primary shadow-glass-sm'
+              ? 'bg-accent-orange text-white shadow-sm'
               : 'text-text-tertiary hover:text-text-secondary'
           }`}
         >
@@ -65,7 +65,7 @@ export function AuthSection() {
           onClick={() => setMode('signup')}
           className={`flex-1 py-2 px-4 rounded-xl text-sm font-medium transition-all ${
             mode === 'signup'
-              ? 'bg-background-secondary text-text-primary shadow-glass-sm'
+              ? 'bg-accent-orange text-white shadow-sm'
               : 'text-text-tertiary hover:text-text-secondary'
           }`}
         >
