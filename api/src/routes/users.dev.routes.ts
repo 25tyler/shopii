@@ -3,6 +3,7 @@ import { FastifyInstance } from 'fastify';
 import { prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.dev.js';
 import { z } from 'zod';
+import { formatArray, parseArray, formatJson } from '../utils/db-helpers.js';
 
 const UpdatePreferencesRequestSchema = z.object({
   categories: z.array(z.string()).optional(),
@@ -40,15 +41,15 @@ export async function devUsersRoutes(fastify: FastifyInstance) {
         };
       }
 
-      // Parse JSON strings for SQLite
+      // Parse arrays
       return {
-        categories: JSON.parse(preferences.categories as string),
+        categories: parseArray(preferences.categories),
         budgetMin: preferences.budgetMin,
         budgetMax: preferences.budgetMax,
         currency: preferences.currency,
         qualityPreference: preferences.qualityPreference,
-        brandPreferences: JSON.parse(preferences.brandPreferences as string),
-        brandExclusions: JSON.parse(preferences.brandExclusions as string),
+        brandPreferences: parseArray(preferences.brandPreferences),
+        brandExclusions: parseArray(preferences.brandExclusions),
       };
     }
   );
@@ -85,7 +86,7 @@ export async function devUsersRoutes(fastify: FastifyInstance) {
       const preferences = await prisma.userPreferences.upsert({
         where: { userId },
         update: {
-          ...(updates.categories !== undefined && { categories: JSON.stringify(updates.categories) }),
+          ...(updates.categories !== undefined && { categories: formatArray(updates.categories) as any }),
           ...(updates.budgetMin !== undefined && { budgetMin: updates.budgetMin }),
           ...(updates.budgetMax !== undefined && { budgetMax: updates.budgetMax }),
           ...(updates.currency !== undefined && { currency: updates.currency }),
@@ -93,32 +94,32 @@ export async function devUsersRoutes(fastify: FastifyInstance) {
             qualityPreference: updates.qualityPreference,
           }),
           ...(updates.brandPreferences !== undefined && {
-            brandPreferences: JSON.stringify(updates.brandPreferences),
+            brandPreferences: formatArray(updates.brandPreferences) as any,
           }),
           ...(updates.brandExclusions !== undefined && {
-            brandExclusions: JSON.stringify(updates.brandExclusions),
+            brandExclusions: formatArray(updates.brandExclusions) as any,
           }),
         },
         create: {
           userId,
-          categories: JSON.stringify(updates.categories || []),
+          categories: formatArray(updates.categories || []) as any,
           budgetMin: updates.budgetMin || 0,
           budgetMax: updates.budgetMax || 1000,
           currency: updates.currency || 'USD',
           qualityPreference: updates.qualityPreference || 'mid-range',
-          brandPreferences: JSON.stringify(updates.brandPreferences || []),
-          brandExclusions: JSON.stringify(updates.brandExclusions || []),
+          brandPreferences: formatArray(updates.brandPreferences || []) as any,
+          brandExclusions: formatArray(updates.brandExclusions || []) as any,
         },
       });
 
       return {
-        categories: JSON.parse(preferences.categories as string),
+        categories: parseArray(preferences.categories),
         budgetMin: preferences.budgetMin,
         budgetMax: preferences.budgetMax,
         currency: preferences.currency,
         qualityPreference: preferences.qualityPreference,
-        brandPreferences: JSON.parse(preferences.brandPreferences as string),
-        brandExclusions: JSON.parse(preferences.brandExclusions as string),
+        brandPreferences: parseArray(preferences.brandPreferences),
+        brandExclusions: parseArray(preferences.brandExclusions),
       };
     }
   );
@@ -173,7 +174,7 @@ export async function devUsersRoutes(fastify: FastifyInstance) {
           userId,
           productId,
           interactionType,
-          context: context ? JSON.stringify(context) : null,
+          context: context ? (formatJson(context) as any) : null,
         },
       });
 

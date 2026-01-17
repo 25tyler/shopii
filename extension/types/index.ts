@@ -48,8 +48,9 @@ export interface ProductCard {
     amount: number;
     currency: string;
   };
-  aiRating: number;
-  confidence: number;
+  aiRating: number; // General product quality (0-100)
+  matchScore: number; // How well it matches the search query (0-100)
+  confidence: number; // Legacy - kept for backwards compat
   pros: string[];
   cons: string[];
   affiliateUrl: string;

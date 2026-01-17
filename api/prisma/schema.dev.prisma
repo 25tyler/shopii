@@ -37,6 +37,10 @@ model UserPreferences {
   qualityPreference String @default("mid-range") @map("quality_preference")
   brandPreferences  String @default("[]") @map("brand_preferences") // JSON array
   brandExclusions   String @default("[]") @map("brand_exclusions") // JSON array
+  // Learned preferences from search behavior
+  learnedCategories String @default("[]") @map("learned_categories") // JSON: [{category, weight, lastSeen}]
+  learnedBrands     String @default("[]") @map("learned_brands") // JSON: [{brand, weight, lastSeen}]
+  recentSearches    String @default("[]") @map("recent_searches") // JSON: last 20 search queries
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -227,4 +231,41 @@ model UsageTracking {
 
   @@id([userId, date])
   @@map("usage_tracking")
+}
+
+// Cached products from research - stores query-agnostic product info
+model CachedProduct {
+  id                  String   @id @default(uuid())
+  // Unique identifier: normalized brand + name
+  normalizedKey       String   @unique @map("normalized_key")
+  name                String
+  brand               String
+  category            String
+  // Query-agnostic description that works for any search
+  description         String
+  // General product info
+  estimatedPrice      String?  @map("estimated_price")
+  imageUrl            String?  @map("image_url")
+  affiliateUrl        String?  @map("affiliate_url")
+  retailer            String
+  // Query-agnostic pros/cons (stored as JSON string for SQLite)
+  pros                String   @default("[]")
+  cons                String   @default("[]")
+  // Validation/source info
+  endorsementStrength String   @map("endorsement_strength") // strong, moderate, weak
+  endorsementQuotes   String   @default("[]") @map("endorsement_quotes") // JSON array
+  sourceTypes         String   @default("[]") @map("source_types") // JSON array
+  sourcesCount        Int      @default(1) @map("sources_count")
+  // Quality score (0-100) - general product quality, NOT query-specific
+  qualityScore        Int      @map("quality_score")
+  // Metadata
+  searchesFoundIn     Int      @default(1) @map("searches_found_in") // How many searches this product appeared in
+  lastSeenAt          DateTime @default(now()) @map("last_seen_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([category])
+  @@index([brand])
+  @@index([qualityScore])
+  @@map("cached_products")
 }

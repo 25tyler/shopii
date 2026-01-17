@@ -3,6 +3,7 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
 import { optionalAuthMiddleware } from '../middleware/auth.dev.js';
+import { formatJson } from '../utils/db-helpers.js';
 
 const AMAZON_AFFILIATE_TAG = process.env.AMAZON_AFFILIATE_TAG || 'shopii-20';
 
@@ -54,10 +55,10 @@ export async function devTrackingRoutes(fastify: FastifyInstance) {
             userId,
             productId,
             interactionType: 'click_affiliate',
-            context: JSON.stringify({
+            context: formatJson({
               url: clickUrl,
               network: affiliateNetwork,
-            }),
+            }) as any,
           },
         });
       }

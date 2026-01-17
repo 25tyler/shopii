@@ -2,9 +2,10 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../config/prisma.js';
 import type { User } from '@prisma/client';
+import { formatArray } from '../utils/db-helpers.js';
 
-// Test user ID for development
-const DEV_USER_ID = 'dev-user-00000000-0000-0000-0000-000000000001';
+// Test user ID for development (valid UUID format for PostgreSQL)
+const DEV_USER_ID = '00000000-0000-0000-0000-000000000001';
 const DEV_USER_EMAIL = 'dev@shopii.test';
 
 // Extend FastifyRequest to include user
@@ -30,13 +31,13 @@ async function getOrCreateDevUser(): Promise<User> {
         plan: 'pro', // Pro in dev mode for unlimited testing
         preferences: {
           create: {
-            categories: JSON.stringify(['electronics', 'audio', 'computing']),
+            categories: formatArray(['electronics', 'audio', 'computing']) as any,
             budgetMin: 0,
             budgetMax: 2000,
             currency: 'USD',
             qualityPreference: 'mid-range',
-            brandPreferences: JSON.stringify([]),
-            brandExclusions: JSON.stringify([]),
+            brandPreferences: formatArray([]) as any,
+            brandExclusions: formatArray([]) as any,
           },
         },
       },

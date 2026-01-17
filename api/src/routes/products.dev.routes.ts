@@ -3,6 +3,7 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
 import { optionalAuthMiddleware } from '../middleware/auth.dev.js';
+import { parseArray, parseJson } from '../utils/db-helpers.js';
 
 export async function devProductsRoutes(fastify: FastifyInstance) {
   // Search products
@@ -59,10 +60,10 @@ export async function devProductsRoutes(fastify: FastifyInstance) {
 
       // Filter by price range
       if (minPrice !== undefined) {
-        products = products.filter((p) => p.currentPrice && p.currentPrice >= minPrice);
+        products = products.filter((p) => p.currentPrice && Number(p.currentPrice) >= minPrice);
       }
       if (maxPrice !== undefined) {
-        products = products.filter((p) => p.currentPrice && p.currentPrice <= maxPrice);
+        products = products.filter((p) => p.currentPrice && Number(p.currentPrice) <= maxPrice);
       }
 
       // Filter by rating
@@ -94,8 +95,8 @@ export async function devProductsRoutes(fastify: FastifyInstance) {
           },
           aiRating: p.rating?.aiRating || null,
           confidence: p.rating?.confidence ? Number(p.rating.confidence) : null,
-          pros: p.rating?.pros ? JSON.parse(p.rating.pros as string) : [],
-          cons: p.rating?.cons ? JSON.parse(p.rating.cons as string) : [],
+          pros: p.rating?.pros ? parseArray(p.rating.pros) : [],
+          cons: p.rating?.cons ? parseArray(p.rating.cons) : [],
           affiliateUrl: p.affiliateUrl,
           retailer: p.retailer,
         })),
@@ -158,7 +159,7 @@ export async function devProductsRoutes(fastify: FastifyInstance) {
         },
         affiliateUrl: product.affiliateUrl,
         retailer: product.retailer,
-        metadata: product.metadata ? JSON.parse(product.metadata as string) : null,
+        metadata: product.metadata ? parseJson(product.metadata as any) : null,
         lastScrapedAt: product.lastScrapedAt,
         rating: product.rating
           ? {
@@ -169,8 +170,8 @@ export async function devProductsRoutes(fastify: FastifyInstance) {
               valueScore: product.rating.valueScore ? Number(product.rating.valueScore) : null,
               popularityScore: product.rating.popularityScore ? Number(product.rating.popularityScore) : null,
               sourcesAnalyzed: product.rating.sourcesAnalyzed,
-              pros: JSON.parse(product.rating.pros as string),
-              cons: JSON.parse(product.rating.cons as string),
+              pros: parseArray(product.rating.pros),
+              cons: parseArray(product.rating.cons),
               summary: product.rating.summary,
               calculatedAt: product.rating.calculatedAt,
             }
@@ -211,16 +212,16 @@ export async function devProductsRoutes(fastify: FastifyInstance) {
         productId: product.id,
         productName: product.name,
         summary: product.rating?.summary || null,
-        pros: product.rating?.pros ? JSON.parse(product.rating.pros as string) : [],
-        cons: product.rating?.cons ? JSON.parse(product.rating.cons as string) : [],
+        pros: product.rating?.pros ? parseArray(product.rating.pros) : [],
+        cons: product.rating?.cons ? parseArray(product.rating.cons) : [],
         sourcesAnalyzed: product.rating?.sourcesAnalyzed || 0,
         sources: product.reviewSources.map((s) => ({
           type: s.sourceType,
           name: s.sourceName,
           url: s.sourceUrl,
           sentiment: s.extractedSentiment ? Number(s.extractedSentiment) : null,
-          pros: JSON.parse(s.extractedPros as string),
-          cons: JSON.parse(s.extractedCons as string),
+          pros: parseArray(s.extractedPros),
+          cons: parseArray(s.extractedCons),
           upvotes: s.upvotes,
           scrapedAt: s.scrapedAt,
         })),

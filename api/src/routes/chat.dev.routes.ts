@@ -4,8 +4,31 @@ import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.dev.js';
 import { generateChatResponse, generateResearchBasedResponse, detectIntent } from '../services/ai.openai.js';
-import { conductProductResearch } from '../services/research.service.js';
-import { extractProductsFromResearch, fetchProductImages, ExtractedProduct } from '../services/product-extraction.service.js';
+import { conductProductResearch, enrichProducts } from '../services/research.service.js';
+import { extractProductsFromResearch, fetchProductImages, enhanceProductsWithEnrichment, ExtractedProduct } from '../services/product-extraction.service.js';
+import { cacheProducts, searchCachedProducts } from '../services/product-cache.service.js';
+import { learnFromSearch } from '../services/preference-learning.service.js';
+import { formatArray, parseArray, formatJson, parseJson } from '../utils/db-helpers.js';
+
+// Parse price string that might be a range like "$150-200" or single like "$149.99"
+function parsePrice(priceStr: string | null | undefined): number {
+  if (!priceStr) return 0;
+
+  // Remove currency symbols and whitespace
+  const cleaned = priceStr.replace(/[$€£¥,\s]/g, '');
+
+  // Check if it's a range (contains - but not negative)
+  if (cleaned.includes('-') && !cleaned.startsWith('-')) {
+    const parts = cleaned.split('-');
+    // Take the first (lower) price in the range
+    const firstPrice = parseFloat(parts[0] || '0');
+    return isNaN(firstPrice) ? 0 : firstPrice;
+  }
+
+  // Single price
+  const price = parseFloat(cleaned);
+  return isNaN(price) ? 0 : price;
+}
 
 const ChatMessageRequestSchema = z.object({
   message: z.string().min(1).max(2000),
@@ -64,7 +87,7 @@ export async function devChatRoutes(fastify: FastifyInstance) {
           data: {
             userId,
             title: message.slice(0, 50),
-            pageContext: pageContext ? JSON.stringify(pageContext) : null,
+            pageContext: pageContext ? (formatJson(pageContext) as any) : null,
           },
           include: {
             messages: true,
@@ -87,17 +110,17 @@ export async function devChatRoutes(fastify: FastifyInstance) {
           content: m.content,
         })) || [];
 
-      // Parse preferences for SQLite
+      // Parse preferences
       const parsedPreferences = preferences
         ? {
             userId: preferences.userId,
-            categories: JSON.parse(preferences.categories as string),
+            categories: parseArray(preferences.categories),
             budgetMin: preferences.budgetMin,
             budgetMax: preferences.budgetMax,
             currency: preferences.currency,
             qualityPreference: preferences.qualityPreference as any,
-            brandPreferences: JSON.parse(preferences.brandPreferences as string),
-            brandExclusions: JSON.parse(preferences.brandExclusions as string),
+            brandPreferences: parseArray(preferences.brandPreferences),
+            brandExclusions: parseArray(preferences.brandExclusions),
           }
         : null;
 
@@ -110,6 +133,10 @@ export async function devChatRoutes(fastify: FastifyInstance) {
         fastify.log.info(`Conducting research for: "${message}"`);
 
         try {
+          // First, check if we have cached products that match this query
+          const cachedMatches = await searchCachedProducts(message, 5);
+          fastify.log.info(`Found ${cachedMatches.length} cached products matching query`);
+
           // Search Reddit, forums, and review sites for real recommendations
           const research = await conductProductResearch(message);
           researchSources = research.sources.map((s) => ({ title: s.title, url: s.url }));
@@ -120,9 +147,27 @@ export async function devChatRoutes(fastify: FastifyInstance) {
           extractedProducts = await extractProductsFromResearch(message, research.context);
           fastify.log.info(`Extracted ${extractedProducts.length} products`);
 
+          // Run enrichment and image fetching in parallel for speed
+          // Enrichment searches for product-specific details to fill in gaps
+          const [enrichmentMap] = await Promise.all([
+            enrichProducts(extractedProducts.map((p) => ({ name: p.name, brand: p.brand }))),
+            // Image fetching runs in parallel too
+          ]);
+          fastify.log.info(`Enriched product data from ${enrichmentMap.size} searches`);
+
+          // Enhance products that have sparse details with enrichment data
+          extractedProducts = await enhanceProductsWithEnrichment(extractedProducts, enrichmentMap);
+          fastify.log.info(`Enhanced products with enrichment data`);
+
           // Fetch product images
           extractedProducts = await fetchProductImages(extractedProducts);
           fastify.log.info(`Fetched images for products`);
+
+          // Cache the extracted products for future queries (async, don't wait)
+          cacheProducts(extractedProducts).catch((err) => {
+            fastify.log.error(`Failed to cache products: ${err.message}`);
+          });
+          fastify.log.info(`Caching ${extractedProducts.length} products in background`);
 
           // Generate response based on extracted products (so AI only discusses products we have cards for)
           aiResponse = await generateResearchBasedResponse(
@@ -136,10 +181,10 @@ export async function devChatRoutes(fastify: FastifyInstance) {
             extractedProducts.map((p) => ({
               name: p.name,
               brand: p.brand,
-              whyRecommended: p.whyRecommended,
+              whyRecommended: p.description,
               pros: p.pros,
               cons: p.cons,
-              confidenceScore: p.confidenceScore,
+              confidenceScore: p.qualityScore,
               endorsementQuotes: p.endorsementQuotes,
             }))
           );
@@ -176,13 +221,13 @@ export async function devChatRoutes(fastify: FastifyInstance) {
             conversationId: conversation.id,
             role: 'user',
             content: message,
-            metadata: JSON.stringify({ intent }),
+            metadata: formatJson({ intent }) as any,
           },
           {
             conversationId: conversation.id,
             role: 'assistant',
             content: aiResponse,
-            productsShown: JSON.stringify(extractedProducts.map((p) => p.name)),
+            productsShown: formatArray(extractedProducts.map((p) => p.name)) as any,
           },
         ],
       });
@@ -198,28 +243,35 @@ export async function devChatRoutes(fastify: FastifyInstance) {
         });
       }
 
+      // Learn from this search to improve "For You" recommendations
+      if (extractedProducts.length > 0) {
+        // Run in background - don't block the response
+        learnFromSearch(userId, message, extractedProducts).catch((err) => {
+          console.error('[Chat] Failed to learn from search:', err);
+        });
+      }
+
       return {
         message: aiResponse,
         products: extractedProducts.map((p) => ({
           id: `${p.brand}-${p.name}`.toLowerCase().replace(/\s+/g, '-'),
           name: p.name,
           brand: p.brand,
-          description: p.whyRecommended || '',
+          description: p.description || '',
           imageUrl: p.imageUrl || '',
-          price: p.estimatedPrice
-            ? {
-                amount: parseFloat(String(p.estimatedPrice).replace(/[^0-9.]/g, '')) || 0,
-                currency: 'USD',
-              }
-            : { amount: 0, currency: 'USD' },
+          price: {
+            amount: parsePrice(p.estimatedPrice),
+            currency: 'USD',
+          },
           pros: p.pros || [],
           cons: p.cons || [],
           affiliateUrl: p.affiliateUrl || '',
           retailer: p.retailer || 'Amazon',
           sourcesCount: p.sourcesCount || 1,
-          // Use actual confidence from research-based extraction
-          aiRating: p.confidenceScore || 75, // Direct from AI analysis
-          confidence: (p.confidenceScore || 75) / 100, // Convert to 0-1 scale
+          // Two separate ratings
+          aiRating: p.qualityScore || 75, // General product quality (cached)
+          confidence: (p.matchScore || 75) / 100, // Query match/relevance (per-search)
+          matchScore: p.matchScore || 75, // Explicit match score for sorting
           endorsementStrength: p.endorsementStrength || 'moderate',
           endorsementQuotes: p.endorsementQuotes || [],
           sourceTypes: p.sourceTypes || [],
@@ -299,14 +351,14 @@ export async function devChatRoutes(fastify: FastifyInstance) {
       return {
         id: conversation.id,
         title: conversation.title,
-        pageContext: conversation.pageContext ? JSON.parse(conversation.pageContext as string) : null,
+        pageContext: conversation.pageContext ? parseJson(conversation.pageContext as any) : null,
         createdAt: conversation.createdAt,
         updatedAt: conversation.updatedAt,
         messages: conversation.messages.map((m) => ({
           id: m.id,
           role: m.role,
           content: m.content,
-          productsShown: JSON.parse(m.productsShown as string),
+          productsShown: parseArray(m.productsShown as any),
           createdAt: m.createdAt,
         })),
       };

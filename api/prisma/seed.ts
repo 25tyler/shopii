@@ -384,6 +384,124 @@ async function main() {
     }
   }
 
+  // Seed cached products for "For You" page
+  console.log('\n📦 Seeding cached products...');
+
+  const cachedProductsData = [
+    {
+      name: 'Sony WH-1000XM5',
+      brand: 'Sony',
+      category: 'audio',
+      description: 'Premium noise-canceling wireless headphones with industry-leading ANC',
+      estimatedPrice: '$348',
+      imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=200',
+      retailer: 'Amazon',
+      pros: ['Best-in-class noise cancellation', 'Exceptional sound quality', '30-hour battery life'],
+      cons: ['Premium price', 'No folding design'],
+      endorsementStrength: 'strong',
+      endorsementQuotes: ['The best ANC headphones you can buy', 'Worth every penny'],
+      sourceTypes: ['reddit', 'youtube', 'review'],
+      qualityScore: 92,
+    },
+    {
+      name: 'Apple AirPods Pro 2',
+      brand: 'Apple',
+      category: 'audio',
+      description: 'True wireless earbuds with active noise cancellation and spatial audio',
+      estimatedPrice: '$249',
+      imageUrl: 'https://images.unsplash.com/photo-1606841837239-c5a1a4a07af7?w=200',
+      retailer: 'Apple',
+      pros: ['Seamless Apple integration', 'Great ANC', 'Spatial audio'],
+      cons: ['Only works best with Apple devices', 'Expensive'],
+      endorsementStrength: 'strong',
+      endorsementQuotes: ['Best earbuds for iPhone users', 'Apple ecosystem magic'],
+      sourceTypes: ['reddit', 'youtube'],
+      qualityScore: 88,
+    },
+    {
+      name: 'Framework Laptop 13',
+      brand: 'Framework',
+      category: 'computing',
+      description: 'Modular, repairable laptop with upgradeable components',
+      estimatedPrice: '$1,049',
+      imageUrl: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=200',
+      retailer: 'Framework',
+      pros: ['Fully modular and repairable', 'Great build quality', 'Future-proof'],
+      cons: ['Battery life could be better', 'Premium pricing'],
+      endorsementStrength: 'strong',
+      endorsementQuotes: ['The future of laptops', 'Right to repair champion'],
+      sourceTypes: ['reddit', 'youtube', 'tech_blog'],
+      qualityScore: 86,
+    },
+    {
+      name: 'Anker PowerCore 20000mAh',
+      brand: 'Anker',
+      category: 'electronics',
+      description: 'High-capacity portable power bank with fast charging',
+      estimatedPrice: '$49.99',
+      imageUrl: 'https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?w=200',
+      retailer: 'Amazon',
+      pros: ['Massive capacity', 'Fast charging', 'Reliable brand'],
+      cons: ['Heavy', 'Slow to recharge itself'],
+      endorsementStrength: 'moderate',
+      endorsementQuotes: ['Best value power bank', 'Never runs out of juice'],
+      sourceTypes: ['reddit', 'amazon'],
+      qualityScore: 82,
+    },
+    {
+      name: 'LG C3 OLED TV 55-inch',
+      brand: 'LG',
+      category: 'electronics',
+      description: 'Premium OLED TV with perfect blacks and gaming features',
+      estimatedPrice: '$1,399',
+      imageUrl: 'https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?w=200',
+      retailer: 'Best Buy',
+      pros: ['Perfect black levels', 'Great for gaming', 'Beautiful picture'],
+      cons: ['Risk of burn-in', 'Expensive'],
+      endorsementStrength: 'strong',
+      endorsementQuotes: ['Best TV for movies and gaming', 'OLED magic'],
+      sourceTypes: ['reddit', 'youtube', 'rtings'],
+      qualityScore: 90,
+    },
+  ];
+
+  for (const product of cachedProductsData) {
+    const normalizedKey = `${product.brand}-${product.name}`
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    const existing = await prisma.cachedProduct.findUnique({
+      where: { normalizedKey },
+    });
+
+    if (!existing) {
+      await prisma.cachedProduct.create({
+        data: {
+          normalizedKey,
+          name: product.name,
+          brand: product.brand,
+          category: product.category,
+          description: product.description,
+          estimatedPrice: product.estimatedPrice,
+          imageUrl: product.imageUrl,
+          retailer: product.retailer,
+          pros: formatArray(product.pros) as any,
+          cons: formatArray(product.cons) as any,
+          endorsementStrength: product.endorsementStrength,
+          endorsementQuotes: formatArray(product.endorsementQuotes) as any,
+          sourceTypes: formatArray(product.sourceTypes) as any,
+          sourcesCount: product.sourceTypes.length,
+          qualityScore: product.qualityScore,
+          searchesFoundIn: 1,
+        },
+      });
+      console.log(`  ✅ Cached "${product.name}"`);
+    } else {
+      console.log(`  ⏭️  Skipping "${product.name}" (already cached)`);
+    }
+  }
+
   console.log('\n🎉 Seeding complete!\n');
   console.log('You can now run: npm run dev\n');
 }

@@ -184,30 +184,23 @@ export async function devAuthRoutes(fastify: FastifyInstance) {
               budgetMax: mergedPreferences.budgetMax,
               currency: mergedPreferences.currency,
               qualityPreference: mergedPreferences.qualityPreference,
-              brandPreferences: JSON.stringify(mergedPreferences.brandPreferences),
-              brandExclusions: JSON.stringify(mergedPreferences.brandExclusions),
+              brandPreferences: formatArray(mergedPreferences.brandPreferences) as any,
+              brandExclusions: formatArray(mergedPreferences.brandExclusions) as any,
             },
           },
         },
       });
     }
 
-    // Get a session token
-    const { data: sessionData, error: sessionError } = await supabaseAdmin.auth.admin.createSession({
-      user_id: data.user.id,
-    });
-
-    if (sessionError) {
-      return reply.status(500).send({
-        error: 'Session Creation Failed',
-        message: sessionError.message,
-      });
-    }
+    // For dev mode, generate simple session tokens
+    // In production, this would use proper Supabase session creation
+    const devAccessToken = `dev_access_${user.id}_${Date.now()}`;
+    const devRefreshToken = `dev_refresh_${user.id}_${Date.now()}`;
 
     return {
-      access_token: sessionData.session.access_token,
-      refresh_token: sessionData.session.refresh_token,
-      expires_in: sessionData.session.expires_in,
+      access_token: devAccessToken,
+      refresh_token: devRefreshToken,
+      expires_in: 3600,
       user: {
         id: user.id,
         email: user.email,
@@ -225,7 +218,7 @@ export async function devAuthRoutes(fastify: FastifyInstance) {
       refresh_token: body.refresh_token,
     });
 
-    if (error) {
+    if (error || !data.session) {
       return reply.status(401).send({
         error: 'Refresh Failed',
         message: 'Invalid refresh token',

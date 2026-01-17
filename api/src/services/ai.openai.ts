@@ -289,33 +289,48 @@ export async function generateResearchBasedResponse(
 ): Promise<string> {
   const userContext = buildUserContext(context);
 
-  // Build a product-focused system prompt
-  let systemPrompt = SYSTEM_PROMPT;
+  // Build a minimal system prompt - product cards will show the details
+  let systemPrompt = `You are Shopii, a concise AI shopping assistant.
 
-  // If we have extracted products, tell the AI to ONLY discuss those
+CRITICAL: Product cards will be displayed below your message showing ALL the details (pros, cons, prices, ratings, endorsement quotes). Your job is to provide a brief, conversational intro - NOT to repeat what the cards show.`;
+
+  // If we have extracted products, give AI just the names for context
   if (extractedProducts.length > 0) {
-    const productList = extractedProducts.map((p, i) =>
-      `${i + 1}. **${p.brand} ${p.name}** (Confidence: ${p.confidenceScore}%)
-   - Why: ${p.whyRecommended}
-   - Quotes: ${p.endorsementQuotes.slice(0, 2).map(q => `"${q}"`).join(', ')}
-   - Pros: ${p.pros.join(', ')}
-   - Cons: ${p.cons.join(', ')}`
-    ).join('\n\n');
+    const productNames = extractedProducts.map((p) => `${p.brand} ${p.name}`).join(', ');
 
     systemPrompt += `
 
-CRITICAL: You MUST ONLY discuss these ${extractedProducts.length} products that we have verified data for. Do NOT mention any other products.
+We found ${extractedProducts.length} recommended products: ${productNames}
 
-VERIFIED PRODUCTS TO DISCUSS:
-${productList}
+YOUR RESPONSE MUST:
+1. Be 1-3 sentences MAX
+2. Give a brief, friendly intro like "Based on Reddit discussions, here are some great options:" or "I found some highly-rated picks from enthusiast communities:"
+3. Optionally add ONE brief insight not shown in cards (e.g., "The X is the crowd favorite, while the Y is better if you prioritize Z")
 
-Write a helpful response that:
-1. Briefly introduces the recommendations (1 sentence)
-2. For each product, explain WHY it's recommended using the quotes and reasoning provided
-3. Keep it concise - the product cards will show the full details
-4. End with a follow-up question
+YOUR RESPONSE MUST NOT:
+- List the products by name (cards show them)
+- Describe features, pros, or cons (cards show them)
+- Include endorsement quotes (cards show them)
+- Repeat any information visible in the product cards
+- Be longer than 3 sentences
 
-Do NOT list products that aren't in the verified list above.`;
+Example good responses:
+- "Here are some top picks from r/BuyItForLife and Wirecutter. The cards below have all the details!"
+- "Found some solid options based on enthusiast recommendations. The first one is the crowd favorite for everyday use."
+- "Based on Reddit discussions, these are the most recommended. Let me know if you want to compare any specific features!"`;
+  } else {
+    // No products found - tell AI to be honest about it
+    systemPrompt += `
+
+IMPORTANT: Our research didn't find strongly-endorsed specific products for this query. Do NOT make up or suggest specific product names.
+
+Instead:
+1. Acknowledge that you searched but didn't find well-reviewed specific products
+2. Explain what to look for when shopping for this category (features, materials, things to avoid)
+3. Suggest the user try a more specific query or ask about a particular brand
+4. Keep the response helpful but honest
+
+Do NOT list specific product names or brands as recommendations.`;
   }
 
   const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
@@ -354,6 +369,116 @@ Do NOT list products that aren't in the verified list above.`;
     console.error('OpenAI API error:', error?.message || error);
     return "I encountered an error while researching. Please try again.";
   }
+}
+
+// AI-generated search strategy for product research
+export interface SearchStrategy {
+  searchQueries: string[];  // 5-7 optimized search queries
+  priorityDomains: string[]; // Which domains to prioritize for this query
+  searchIntent: string; // What the user is looking for
+}
+
+export async function generateSearchStrategy(userQuery: string): Promise<SearchStrategy> {
+  const prompt = `Generate an optimal search strategy for finding product recommendations for: "${userQuery}"
+
+Your job is to figure out WHERE enthusiasts discuss this type of product and HOW to search for recommendations.
+
+Return a JSON object with:
+
+1. searchQueries: Array of 5-7 search queries that will find the BEST recommendations. Include:
+   - At least 2 queries targeting Reddit (e.g., "site:reddit.com ${userQuery} best recommend")
+   - Queries with endorsement language ("best", "highly recommend", "worth it", "gold standard")
+   - Queries looking for guides, megathreads, or comparison discussions
+   - Use the EXACT product terms the user mentioned
+
+2. priorityDomains: Array of 4-8 domains to search. You must determine the best sites for THIS specific product:
+   - FIRST: Always include "reddit.com" (has subreddits for everything)
+   - THEN: Add 1-2 expert review sites that cover this product category (e.g., wirecutter.com, consumerreports.org, rtings.com, outdoorgearlab.com, seriouseats.com, etc.)
+   - THEN: Add 1-3 enthusiast forums or niche sites where people who care deeply about this product would discuss it
+
+   Think about: What forums exist for this hobby/category? What review sites specialize in this? Where do enthusiasts gather?
+
+   Examples:
+   - Headphones → head-fi.org, audiosciencereview.com
+   - Camping gear → backpackinglight.com, outdoorgearlab.com
+   - Coffee equipment → home-barista.com, coffeeforums.com
+   - Watches → watchuseek.com, hodinkee.com
+   - Denim/fashion → styleforum.net, heddels.com
+   - Dog products → dogfoodadvisor.com, whole-dog-journal.com
+   - Baby products → whattoexpect.com, babylist.com
+   - Kitchen equipment → seriouseats.com, americastestkitchen.com
+   - Cars → edmunds.com, caranddriver.com
+
+   If you don't know specific forums for this product type, just use reddit.com + general review sites like wirecutter.com and consumerreports.org.
+
+3. searchIntent: One sentence describing what the user is looking for.
+
+Return ONLY valid JSON, no markdown.`;
+
+  try {
+    const response = await getOpenAI().chat.completions.create({
+      model: 'gpt-4o-mini',
+      max_tokens: 800,
+      temperature: 0.3,
+      messages: [
+        {
+          role: 'system',
+          content: `You are a search optimization expert with deep knowledge of where enthusiasts discuss products online.
+
+Your job is to identify:
+1. The best search queries to find real recommendations
+2. The specific websites where enthusiasts of THIS product category gather
+
+Always include reddit.com first. Then add relevant expert review sites and niche forums/communities.
+
+Use your knowledge of the internet to find the RIGHT communities for each product type. Don't limit yourself to a predefined list - think about what forums, review sites, and communities exist for this specific category.`,
+        },
+        { role: 'user', content: prompt },
+      ],
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      return getDefaultSearchStrategy(userQuery);
+    }
+
+    let jsonContent = content.trim();
+    if (jsonContent.startsWith('```')) {
+      jsonContent = jsonContent.replace(/```json?\n?/g, '').replace(/```$/g, '').trim();
+    }
+
+    const parsed = JSON.parse(jsonContent);
+
+    console.log(`AI generated search strategy:`, {
+      queries: parsed.searchQueries?.length || 0,
+      domains: parsed.priorityDomains?.length || 0,
+      intent: parsed.searchIntent
+    });
+
+    return {
+      searchQueries: parsed.searchQueries || getDefaultSearchStrategy(userQuery).searchQueries,
+      priorityDomains: parsed.priorityDomains || ['reddit.com'],
+      searchIntent: parsed.searchIntent || userQuery,
+    };
+  } catch (error) {
+    console.error('Failed to generate search strategy:', error);
+    return getDefaultSearchStrategy(userQuery);
+  }
+}
+
+// Fallback if AI strategy generation fails
+function getDefaultSearchStrategy(query: string): SearchStrategy {
+  return {
+    searchQueries: [
+      `${query} reddit best recommend`,
+      `${query} site:reddit.com guide`,
+      `best ${query} review`,
+      `${query} vs comparison`,
+      `${query} "highly recommend" OR "worth it"`,
+    ],
+    priorityDomains: ['reddit.com', 'wirecutter.com'],
+    searchIntent: query,
+  };
 }
 
 export async function generateProductSummary(
