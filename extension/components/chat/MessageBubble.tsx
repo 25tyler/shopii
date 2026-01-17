@@ -11,11 +11,11 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 
   if (message.isLoading) {
     return (
-      <div className="flex gap-3">
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-shopii-primary to-shopii-secondary flex items-center justify-center flex-shrink-0">
-          <span className="text-white text-xs font-bold">S</span>
+      <div className="flex gap-3 mb-4">
+        <div className="w-8 h-8 rounded-full bg-background-secondary border border-border-light flex items-center justify-center flex-shrink-0">
+          <span className="text-text-secondary text-sm">S</span>
         </div>
-        <div className="bg-slate-800 rounded-2xl rounded-tl-sm px-4 py-3">
+        <div className="bg-background-secondary border border-border-light rounded-2xl rounded-tl-md px-4 py-3 shadow-sm">
           <TypingIndicator />
         </div>
       </div>
@@ -24,21 +24,21 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 
   if (isUser) {
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[85%] bg-gradient-to-r from-shopii-primary to-shopii-secondary rounded-2xl rounded-tr-sm px-4 py-3">
-          <p className="text-white text-sm whitespace-pre-wrap">{message.content}</p>
+      <div className="flex justify-end mb-4">
+        <div className="max-w-[80%] bg-background-tertiary border border-border-light rounded-2xl rounded-tr-md px-4 py-3">
+          <p className="text-text-primary text-sm whitespace-pre-wrap">{message.content}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex gap-3">
-      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-shopii-primary to-shopii-secondary flex items-center justify-center flex-shrink-0">
-        <span className="text-white text-xs font-bold">S</span>
+    <div className="flex gap-3 mb-6">
+      <div className="w-8 h-8 rounded-full bg-background-secondary border border-border-light flex items-center justify-center flex-shrink-0">
+        <span className="text-text-secondary text-sm">S</span>
       </div>
-      <div className="max-w-[85%] bg-slate-800 rounded-2xl rounded-tl-sm px-4 py-3">
-        <p className="text-slate-100 text-sm whitespace-pre-wrap">{message.content}</p>
+      <div className="max-w-[80%] bg-background-secondary border border-border-light rounded-2xl rounded-tl-md px-4 py-3 shadow-sm">
+        <p className="text-text-primary text-sm whitespace-pre-wrap">{message.content}</p>
       </div>
     </div>
   );

@@ -16,14 +16,14 @@ declare global {
   const fakeBrowser: typeof import('wxt/testing').fakeBrowser
   const injectScript: typeof import('wxt/utils/inject-script').injectScript
   const storage: typeof import('wxt/utils/storage').storage
-  const useApi: typeof import('/Users/tyler/shopii/extension/hooks/useApi').useApi
+  const useApi: typeof import('/Users/andrewkim/Documents/Programming/shopii/extension/hooks/useApi').useApi
   const useAppConfig: typeof import('wxt/utils/app-config').useAppConfig
-  const useAuth: typeof import('/Users/tyler/shopii/extension/hooks/useAuth').useAuth
+  const useAuth: typeof import('/Users/andrewkim/Documents/Programming/shopii/extension/hooks/useAuth').useAuth
   const useCallback: typeof import('react').useCallback
   const useContext: typeof import('react').useContext
   const useEffect: typeof import('react').useEffect
   const useMemo: typeof import('react').useMemo
-  const usePaginatedApi: typeof import('/Users/tyler/shopii/extension/hooks/useApi').usePaginatedApi
+  const usePaginatedApi: typeof import('/Users/andrewkim/Documents/Programming/shopii/extension/hooks/useApi').usePaginatedApi
   const useReducer: typeof import('react').useReducer
   const useRef: typeof import('react').useRef
   const useState: typeof import('react').useState

@@ -35,7 +35,7 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
   };
 
   return (
-    <div className="relative flex items-end gap-2 bg-slate-800 rounded-2xl border border-slate-700 focus-within:border-shopii-primary transition-colors">
+    <div className="relative">
       <textarea
         ref={textareaRef}
         value={value}
@@ -44,14 +44,14 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
         disabled={disabled}
         placeholder={placeholder || 'Ask about any product...'}
         rows={1}
-        className="flex-1 bg-transparent text-white text-sm px-4 py-3 resize-none focus:outline-none placeholder:text-slate-500 disabled:opacity-50"
+        className="w-full px-4 py-3 pr-12 bg-background-secondary border border-border-light rounded-xl text-sm text-text-primary placeholder:text-text-quaternary focus:outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/20 resize-none overflow-y-hidden transition-all disabled:opacity-50 disabled:cursor-not-allowed"
       />
       <button
         onClick={handleSubmit}
         disabled={!value.trim() || disabled}
-        className="p-3 text-shopii-primary hover:text-shopii-secondary disabled:text-slate-600 disabled:cursor-not-allowed transition-colors"
+        className="absolute right-2 bottom-2.5 w-8 h-8 rounded-lg bg-accent-blue hover:bg-blue-600 disabled:bg-background-tertiary flex items-center justify-center transition-colors"
       >
-        <SendIcon className="w-5 h-5" />
+        <SendIcon className="w-4 h-4 text-white" />
       </button>
     </div>
   );
