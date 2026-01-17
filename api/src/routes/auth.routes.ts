@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { supabaseAdmin } from '../config/supabase.js';
+import { formatArray, parseArray } from '../utils/db-helpers.js';
 import { z } from 'zod';
 
 // Validation schemas
@@ -99,13 +100,13 @@ export async function authRoutes(fastify: FastifyInstance) {
           plan: 'free',
           preferences: {
             create: {
-              categories: JSON.stringify(mergedPreferences.categories),
+              categories: formatArray(mergedPreferences.categories) as any,
               budgetMin: mergedPreferences.budgetMin,
               budgetMax: mergedPreferences.budgetMax,
               currency: mergedPreferences.currency,
               qualityPreference: mergedPreferences.qualityPreference,
-              brandPreferences: JSON.stringify(mergedPreferences.brandPreferences),
-              brandExclusions: JSON.stringify(mergedPreferences.brandExclusions),
+              brandPreferences: formatArray(mergedPreferences.brandPreferences) as any,
+              brandExclusions: formatArray(mergedPreferences.brandExclusions) as any,
             },
           },
         },
@@ -233,13 +234,13 @@ export async function authRoutes(fastify: FastifyInstance) {
             plan: 'free',
             preferences: {
               create: {
-                categories: JSON.stringify(mergedPreferences.categories),
+                categories: formatArray(mergedPreferences.categories) as any,
                 budgetMin: mergedPreferences.budgetMin,
                 budgetMax: mergedPreferences.budgetMax,
                 currency: mergedPreferences.currency,
                 qualityPreference: mergedPreferences.qualityPreference,
-                brandPreferences: JSON.stringify(mergedPreferences.brandPreferences),
-                brandExclusions: JSON.stringify(mergedPreferences.brandExclusions),
+                brandPreferences: formatArray(mergedPreferences.brandPreferences) as any,
+                brandExclusions: formatArray(mergedPreferences.brandExclusions) as any,
               },
             },
           },
@@ -328,16 +329,16 @@ export async function authRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Parse JSON arrays for SQLite
+      // Parse arrays (works for both SQLite JSON strings and PostgreSQL native arrays)
       const preferences = userWithPreferences.preferences
         ? {
-            categories: JSON.parse(userWithPreferences.preferences.categories as string),
+            categories: parseArray(userWithPreferences.preferences.categories),
             budgetMin: userWithPreferences.preferences.budgetMin,
             budgetMax: userWithPreferences.preferences.budgetMax,
             currency: userWithPreferences.preferences.currency,
             qualityPreference: userWithPreferences.preferences.qualityPreference,
-            brandPreferences: JSON.parse(userWithPreferences.preferences.brandPreferences as string),
-            brandExclusions: JSON.parse(userWithPreferences.preferences.brandExclusions as string),
+            brandPreferences: parseArray(userWithPreferences.preferences.brandPreferences),
+            brandExclusions: parseArray(userWithPreferences.preferences.brandExclusions),
           }
         : null;
 

@@ -3,6 +3,7 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
 import { optionalAuthMiddleware } from '../middleware/auth.dev.js';
+import { parseArray } from '../utils/db-helpers.js';
 
 export async function devSuggestionsRoutes(fastify: FastifyInstance) {
   // Get personalized suggestions feed
@@ -34,9 +35,9 @@ export async function devSuggestionsRoutes(fastify: FastifyInstance) {
         });
 
         if (preferences) {
-          preferredCategories = JSON.parse(preferences.categories as string);
+          preferredCategories = parseArray(preferences.categories);
           maxBudget = preferences.budgetMax;
-          excludedBrands = JSON.parse(preferences.brandExclusions as string);
+          excludedBrands = parseArray(preferences.brandExclusions);
         }
       }
 
@@ -118,8 +119,8 @@ export async function devSuggestionsRoutes(fastify: FastifyInstance) {
           },
           aiRating: p.rating?.aiRating || null,
           confidence: p.rating?.confidence ? Number(p.rating.confidence) : null,
-          pros: p.rating?.pros ? JSON.parse(p.rating.pros as string) : [],
-          cons: p.rating?.cons ? JSON.parse(p.rating.cons as string) : [],
+          pros: p.rating?.pros ? parseArray(p.rating.pros) : [],
+          cons: p.rating?.cons ? parseArray(p.rating.cons) : [],
           affiliateUrl: p.affiliateUrl,
           retailer: p.retailer,
           isSponsored: p.isSponsored,
@@ -180,8 +181,8 @@ export async function devSuggestionsRoutes(fastify: FastifyInstance) {
           },
           aiRating: p.rating?.aiRating || null,
           confidence: p.rating?.confidence ? Number(p.rating.confidence) : null,
-          pros: p.rating?.pros ? JSON.parse(p.rating.pros as string) : [],
-          cons: p.rating?.cons ? JSON.parse(p.rating.cons as string) : [],
+          pros: p.rating?.pros ? parseArray(p.rating.pros) : [],
+          cons: p.rating?.cons ? parseArray(p.rating.cons) : [],
           affiliateUrl: p.affiliateUrl,
           retailer: p.retailer,
           recentInteractions: 0, // Simplified for dev mode

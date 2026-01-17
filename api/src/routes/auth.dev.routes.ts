@@ -4,6 +4,8 @@ import { prisma } from '../config/prisma.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { z } from 'zod';
+import { formatArray, parseArray } from '@/utils/db-helpers.js';
+import { DEV_USER_EMAIL, DEV_USER_ID } from '@/middleware/auth.dev.js';
 
 // Validation schemas
 const signUpSchema = z.object({
@@ -86,13 +88,13 @@ export async function devAuthRoutes(fastify: FastifyInstance) {
         plan: 'free',
         preferences: {
           create: {
-            categories: JSON.stringify(mergedPreferences.categories),
+            categories: formatArray(mergedPreferences.categories) as any,
             budgetMin: mergedPreferences.budgetMin,
             budgetMax: mergedPreferences.budgetMax,
             currency: mergedPreferences.currency,
             qualityPreference: mergedPreferences.qualityPreference,
-            brandPreferences: JSON.stringify(mergedPreferences.brandPreferences),
-            brandExclusions: JSON.stringify(mergedPreferences.brandExclusions),
+            brandPreferences: formatArray(mergedPreferences.brandPreferences) as any,
+            brandExclusions: formatArray(mergedPreferences.brandExclusions) as any,
           },
         },
       },
@@ -177,7 +179,7 @@ export async function devAuthRoutes(fastify: FastifyInstance) {
           plan: 'free',
           preferences: {
             create: {
-              categories: JSON.stringify(mergedPreferences.categories),
+              categories: formatArray(mergedPreferences.categories) as any,
               budgetMin: mergedPreferences.budgetMin,
               budgetMax: mergedPreferences.budgetMax,
               currency: mergedPreferences.currency,
@@ -259,16 +261,16 @@ export async function devAuthRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Parse JSON arrays for SQLite compatibility
+      // Parse arrays (works for both SQLite and PostgreSQL)
       const preferences = user.preferences
         ? {
-            categories: JSON.parse(user.preferences.categories as string),
+            categories: parseArray(user.preferences.categories),
             budgetMin: user.preferences.budgetMin,
             budgetMax: user.preferences.budgetMax,
             currency: user.preferences.currency,
             qualityPreference: user.preferences.qualityPreference,
-            brandPreferences: JSON.parse(user.preferences.brandPreferences as string),
-            brandExclusions: JSON.parse(user.preferences.brandExclusions as string),
+            brandPreferences: parseArray(user.preferences.brandPreferences),
+            brandExclusions: parseArray(user.preferences.brandExclusions),
           }
         : null;
 
