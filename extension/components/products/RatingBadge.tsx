@@ -2,31 +2,39 @@ import React from 'react';
 
 interface RatingBadgeProps {
   rating: number;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md';
 }
 
 export function RatingBadge({ rating, size = 'md' }: RatingBadgeProps) {
-  // Determine color based on rating
-  const getColor = () => {
-    if (rating >= 85) return 'from-green-500 to-emerald-500';
-    if (rating >= 70) return 'from-lime-500 to-green-500';
-    if (rating >= 55) return 'from-yellow-500 to-amber-500';
-    if (rating >= 40) return 'from-orange-500 to-amber-500';
-    return 'from-red-500 to-orange-500';
+  const getBackgroundColor = (rating: number) => {
+    if (rating >= 85) return 'bg-accent-green/10';
+    if (rating >= 70) return 'bg-accent-orange/10';
+    if (rating >= 55) return 'bg-accent-amber/10';
+    return 'bg-accent-red/10';
+  };
+
+  const getTextColor = (rating: number) => {
+    if (rating >= 85) return 'text-accent-green';
+    if (rating >= 70) return 'text-accent-orange';
+    if (rating >= 55) return 'text-accent-amber';
+    return 'text-accent-red';
   };
 
   const sizeClasses = {
-    sm: 'w-10 h-10 text-xs',
-    md: 'w-12 h-12 text-sm',
-    lg: 'w-16 h-16 text-lg',
+    sm: 'px-2 py-1 text-xs',
+    md: 'px-2.5 py-1.5 text-sm',
   };
 
   return (
     <div
-      className={`${sizeClasses[size]} rounded-lg bg-gradient-to-br ${getColor()} flex items-center justify-center font-bold text-white shadow-lg`}
+      className={`
+        rounded-xl backdrop-blur-sm shadow-glass-sm flex-shrink-0
+        ${getBackgroundColor(rating)}
+        ${sizeClasses[size]}
+      `}
       title={`AI Rating: ${rating}/100`}
     >
-      {rating}
+      <span className={`font-semibold ${getTextColor(rating)}`}>{rating}</span>
     </div>
   );
 }
