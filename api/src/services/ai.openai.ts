@@ -21,27 +21,31 @@ interface ChatContext {
   recentSearches?: string[];
 }
 
-const SYSTEM_PROMPT = `You are Shopii, an AI shopping assistant that helps users find products based on real user opinions from Reddit, YouTube, expert review sites, and forums.
+const SYSTEM_PROMPT = `You are Shopii, an AI shopping assistant that helps users find products based on REAL user opinions from Reddit, forums, and review sites.
+
+CRITICAL: You have access to real-time research from Reddit and forums. Use ONLY the research data provided to make recommendations - do NOT fall back on general knowledge or popular products.
 
 Your personality:
 - Friendly but concise - users are shopping, not chatting
-- Data-driven - always reference sources (Reddit, YouTube, expert reviews)
-- Honest about limitations - if you don't have data, say so
-- Helpful with comparisons and trade-offs
+- Data-driven - always cite specific sources and quotes from the research
+- Honest - if research doesn't have good data, say so
+- Quality-focused - prioritize niche/quality brands that enthusiasts recommend over mainstream popular options
 
 When recommending products:
-1. Focus on WHY each product is good based on real user feedback
-2. Mention specific pros/cons from community discussions
-3. Consider the user's budget and preferences
-4. Be honest about drawbacks - users trust authenticity
+1. Extract specific product names mentioned positively in the research
+2. Explain WHY real users recommend each product (quote their reasoning)
+3. Prioritize products that multiple sources agree on
+4. Highlight niche/quality brands that enthusiasts prefer over mainstream options
+5. Be honest about any concerns or trade-offs mentioned
 
 Format guidelines:
 - Use **bold** for product names
-- Include ratings when available (e.g., "AI Rating: 92/100")
-- Keep responses under 300 words unless comparing multiple products
-- End with a follow-up question to help narrow down choices
+- Quote specific user opinions when relevant (e.g., "One Reddit user noted...")
+- Cite sources (e.g., "According to r/BuyItForLife...")
+- Keep responses under 400 words
+- End with a follow-up question
 
-If asked about products outside your database, acknowledge that you're still building your product database and suggest categories you do cover (tech products like headphones, laptops, keyboards, mice, monitors).`;
+IMPORTANT: Do NOT default to mainstream/popular products. If the research shows enthusiasts prefer a niche brand over a popular one, recommend the niche brand.`;
 
 function buildUserContext(context: ChatContext): string {
   let userContext = '';
@@ -263,6 +267,56 @@ Is there something in these categories I can help you find?`;
   }
 
   return `I'm still building my ${category} database. In the meantime, I can help with other tech products like laptops, keyboards, or monitors. What else are you looking for?`;
+}
+
+// Generate response using real-time research from Reddit/forums
+export async function generateResearchBasedResponse(
+  message: string,
+  context: ChatContext,
+  researchContext: string
+): Promise<string> {
+  const userContext = buildUserContext(context);
+
+  const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+    { role: 'system', content: SYSTEM_PROMPT },
+  ];
+
+  // Add conversation history
+  const recentHistory = context.conversationHistory.slice(-10);
+  for (const msg of recentHistory) {
+    messages.push({
+      role: msg.role,
+      content: msg.content,
+    });
+  }
+
+  // Add research context and user message
+  const fullMessage = `${message}${userContext}
+
+${researchContext}`;
+
+  messages.push({
+    role: 'user',
+    content: fullMessage,
+  });
+
+  try {
+    const response = await getOpenAI().chat.completions.create({
+      model: 'gpt-4o-mini',
+      max_tokens: 1500,
+      messages: messages,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (content) {
+      return content;
+    }
+
+    return "I'm having trouble analyzing the research. Please try again.";
+  } catch (error: any) {
+    console.error('OpenAI API error:', error?.message || error);
+    return "I encountered an error while researching. Please try again.";
+  }
 }
 
 export async function generateProductSummary(

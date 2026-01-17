@@ -1,9 +1,11 @@
-// Development chat routes - uses OpenAI GPT
+// Development chat routes - uses OpenAI GPT with real-time research
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.dev.js';
-import { generateChatResponse, detectIntent } from '../services/ai.openai.js';
+import { generateChatResponse, generateResearchBasedResponse, detectIntent } from '../services/ai.openai.js';
+import { conductProductResearch } from '../services/research.service.js';
+import { extractProductsFromResearch, fetchProductImages, ExtractedProduct } from '../services/product-extraction.service.js';
 
 const ChatMessageRequestSchema = z.object({
   message: z.string().min(1).max(2000),
@@ -78,88 +80,6 @@ export async function devChatRoutes(fastify: FastifyInstance) {
       // Detect intent
       const intent = await detectIntent(message);
 
-      // Search for relevant products if it's a product search
-      let products: any[] = [];
-      if (intent.type === 'product_search' || intent.type === 'comparison') {
-        // Extract search terms from message
-        const searchTerms = message.toLowerCase();
-
-        // Build search conditions based on message content (lowercase to match DB)
-        const categoryMap: Record<string, string[]> = {
-          'headphone': ['audio', 'Audio'],
-          'earbuds': ['audio', 'Audio'],
-          'audio': ['audio', 'Audio'],
-          'speaker': ['audio', 'Audio'],
-          'laptop': ['computing', 'Computing'],
-          'computer': ['computing', 'Computing'],
-          'macbook': ['computing', 'Computing'],
-          'keyboard': ['peripherals', 'Peripherals'],
-          'mouse': ['peripherals', 'Peripherals'],
-          'monitor': ['monitors', 'Monitors'],
-          'display': ['monitors', 'Monitors'],
-        };
-
-        let matchedCategories: string[] = [];
-        for (const [keyword, categories] of Object.entries(categoryMap)) {
-          if (searchTerms.includes(keyword)) {
-            matchedCategories.push(...categories);
-          }
-        }
-
-        // Search products by category or name
-        if (matchedCategories.length > 0) {
-          products = await prisma.product.findMany({
-            where: {
-              category: { in: matchedCategories },
-            },
-            take: 5,
-            include: {
-              rating: true,
-            },
-            orderBy: {
-              createdAt: 'desc',
-            },
-          });
-        }
-
-        // If no category match, try text search on name
-        if (products.length === 0) {
-          products = await prisma.product.findMany({
-            where: {
-              OR: [
-                { name: { contains: message } },
-                { description: { contains: message } },
-              ],
-            },
-            take: 5,
-            include: {
-              rating: true,
-            },
-            orderBy: {
-              createdAt: 'desc',
-            },
-          });
-        }
-
-        // Fallback: return empty if no match (better than random products)
-        if (products.length === 0 && !matchedCategories.length) {
-          // No matching products for this query
-          products = [];
-        }
-
-        // Parse JSON arrays for SQLite
-        products = products.map((p) => ({
-          ...p,
-          rating: p.rating
-            ? {
-                ...p.rating,
-                pros: JSON.parse(p.rating.pros as string),
-                cons: JSON.parse(p.rating.cons as string),
-              }
-            : null,
-        }));
-      }
-
       // Build conversation history
       const conversationHistory =
         conversation.messages?.map((m) => ({
@@ -181,19 +101,64 @@ export async function devChatRoutes(fastify: FastifyInstance) {
           }
         : null;
 
-      // Generate AI response (mock)
-      const aiResponse = await generateChatResponse(
-        message,
-        {
-          preferences: parsedPreferences,
-          pageContext: pageContext || null,
-          conversationHistory,
-        },
-        products.map((p) => ({
-          ...p,
-          currentPrice: p.currentPrice ? Number(p.currentPrice) : null,
-        }))
-      );
+      let aiResponse: string;
+      let extractedProducts: ExtractedProduct[] = [];
+      let researchSources: Array<{ title: string; url: string }> = [];
+
+      // For product searches, conduct real-time research from Reddit/forums
+      if (intent.type === 'product_search' || intent.type === 'comparison') {
+        fastify.log.info(`Conducting research for: "${message}"`);
+
+        try {
+          // Search Reddit, forums, and review sites for real recommendations
+          const research = await conductProductResearch(message);
+          researchSources = research.sources.map((s) => ({ title: s.title, url: s.url }));
+
+          fastify.log.info(`Found ${research.sources.length} research sources`);
+
+          // Extract products from research (with affiliate links)
+          extractedProducts = await extractProductsFromResearch(message, research.context);
+          fastify.log.info(`Extracted ${extractedProducts.length} products`);
+
+          // Fetch product images
+          extractedProducts = await fetchProductImages(extractedProducts);
+          fastify.log.info(`Fetched images for products`);
+
+          // Generate response based on real research data
+          aiResponse = await generateResearchBasedResponse(
+            message,
+            {
+              preferences: parsedPreferences,
+              pageContext: pageContext || null,
+              conversationHistory,
+            },
+            research.context
+          );
+        } catch (error: any) {
+          fastify.log.error(`Research failed: ${error?.message}`);
+          // Fallback to regular response if research fails
+          aiResponse = await generateChatResponse(
+            message,
+            {
+              preferences: parsedPreferences,
+              pageContext: pageContext || null,
+              conversationHistory,
+            },
+            []
+          );
+        }
+      } else {
+        // For general chat, use regular response
+        aiResponse = await generateChatResponse(
+          message,
+          {
+            preferences: parsedPreferences,
+            pageContext: pageContext || null,
+            conversationHistory,
+          },
+          []
+        );
+      }
 
       // Save messages to conversation
       await prisma.message.createMany({
@@ -208,7 +173,7 @@ export async function devChatRoutes(fastify: FastifyInstance) {
             conversationId: conversation.id,
             role: 'assistant',
             content: aiResponse,
-            productsShown: JSON.stringify(products.map((p) => p.id)),
+            productsShown: JSON.stringify(extractedProducts.map((p) => p.name)),
           },
         ],
       });
@@ -226,25 +191,35 @@ export async function devChatRoutes(fastify: FastifyInstance) {
 
       return {
         message: aiResponse,
-        products: products.map((p) => ({
-          id: p.id,
+        products: extractedProducts.map((p) => ({
+          id: `${p.brand}-${p.name}`.toLowerCase().replace(/\s+/g, '-'),
           name: p.name,
-          description: p.description,
-          imageUrl: p.imageUrl,
-          price: {
-            amount: p.currentPrice ? Number(p.currentPrice) : 0,
-            currency: p.currency,
-          },
-          aiRating: p.rating?.aiRating || null,
-          confidence: p.rating?.confidence ? Number(p.rating.confidence) : null,
-          pros: p.rating?.pros || [],
-          cons: p.rating?.cons || [],
-          affiliateUrl: p.affiliateUrl,
-          retailer: p.retailer,
+          brand: p.brand,
+          description: p.whyRecommended || '',
+          imageUrl: p.imageUrl || '',
+          price: p.estimatedPrice
+            ? {
+                amount: parseFloat(p.estimatedPrice.replace(/[^0-9.]/g, '')) || 0,
+                currency: 'USD',
+              }
+            : { amount: 0, currency: 'USD' },
+          pros: p.pros || [],
+          cons: p.cons || [],
+          affiliateUrl: p.affiliateUrl || '',
+          retailer: p.retailer || 'Amazon',
+          sourcesCount: p.sourcesCount || 1,
+          // Use actual confidence from research-based extraction
+          aiRating: p.confidenceScore || 75, // Direct from AI analysis
+          confidence: (p.confidenceScore || 75) / 100, // Convert to 0-1 scale
+          endorsementStrength: p.endorsementStrength || 'moderate',
+          endorsementQuotes: p.endorsementQuotes || [],
+          sourceTypes: p.sourceTypes || [],
           isSponsored: false,
         })),
+        sources: researchSources.slice(0, 5),
         conversationId: conversation.id,
         _devMode: true,
+        _researchBased: intent.type === 'product_search' || intent.type === 'comparison',
       };
     }
   );

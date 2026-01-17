@@ -27,7 +27,7 @@ async function getOrCreateDevUser(): Promise<User> {
         id: DEV_USER_ID,
         email: DEV_USER_EMAIL,
         name: 'Dev User',
-        plan: 'free',
+        plan: 'pro', // Pro in dev mode for unlimited testing
         preferences: {
           create: {
             categories: JSON.stringify(['electronics', 'audio', 'computing']),
