@@ -3,7 +3,15 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-const DEV_USER_ID = 'dev-user-00000000-0000-0000-0000-000000000001';
+const DEV_USER_ID = '00000000-0000-0000-0000-000000000001';
+
+// Detect database type from Prisma datasource
+// @ts-ignore - accessing internal prisma property
+const dbProvider = prisma._engineConfig?.activeProvider || 'sqlite';
+const isPostgres = dbProvider === 'postgresql';
+
+// Helper to format arrays based on database type
+const formatArray = (arr: any[]) => (isPostgres ? arr : JSON.stringify(arr));
 
 // Sample products with ratings
 const sampleProducts = [
@@ -302,13 +310,13 @@ async function main() {
         plan: 'free',
         preferences: {
           create: {
-            categories: JSON.stringify(['electronics', 'audio', 'computing']),
+            categories: formatArray(['electronics', 'audio', 'computing']) as any,
             budgetMin: 0,
             budgetMax: 2000,
             currency: 'USD',
             qualityPreference: 'mid-range',
-            brandPreferences: JSON.stringify([]),
-            brandExclusions: JSON.stringify([]),
+            brandPreferences: formatArray([]) as any,
+            brandExclusions: formatArray([]) as any,
           },
         },
       },
@@ -341,8 +349,8 @@ async function main() {
         rating: {
           create: {
             ...rating,
-            pros: JSON.stringify(rating.pros),
-            cons: JSON.stringify(rating.cons),
+            pros: formatArray(rating.pros) as any,
+            cons: formatArray(rating.cons) as any,
           },
         },
       },
@@ -368,7 +376,7 @@ async function main() {
           campaignName: 'Holiday Audio Sale',
           bidAmount: 0.25,
           dailyBudget: 100.0,
-          targetingCategories: JSON.stringify(['audio', 'electronics']),
+          targetingCategories: formatArray(['audio', 'electronics']) as any,
           isActive: true,
         },
       });

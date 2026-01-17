@@ -48,13 +48,13 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
           avatarUrl: supabaseUser.user_metadata?.avatar_url || null,
           preferences: {
             create: {
-              categories: [],
+              categories: '[]',
               budgetMin: 0,
               budgetMax: 1000,
               currency: 'USD',
               qualityPreference: 'mid-range',
-              brandPreferences: [],
-              brandExclusions: [],
+              brandPreferences: '[]',
+              brandExclusions: '[]',
             },
           },
         },

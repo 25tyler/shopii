@@ -1,78 +1,295 @@
-// Development auth routes - no real authentication
+// Development auth routes - uses real Supabase authentication
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../config/prisma.js';
-import { DEV_USER_ID, DEV_USER_EMAIL } from '../middleware/auth.dev.js';
+import { supabaseAdmin } from '../config/supabase.js';
+import { authMiddleware } from '../middleware/auth.middleware.js';
+import { z } from 'zod';
+
+// Validation schemas
+const signUpSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  name: z.string().optional(),
+  preferences: z
+    .object({
+      categories: z.array(z.string()).optional(),
+      budgetMin: z.number().optional(),
+      budgetMax: z.number().optional(),
+      currency: z.string().optional(),
+      qualityPreference: z.string().optional(),
+      brandPreferences: z.array(z.string()).optional(),
+      brandExclusions: z.array(z.string()).optional(),
+    })
+    .optional(),
+});
+
+const signInSchema = z.object({
+  email: z.string().email(),
+  password: z.string(),
+});
+
+const googleAuthSchema = z.object({
+  idToken: z.string(),
+  preferences: z
+    .object({
+      categories: z.array(z.string()).optional(),
+      budgetMin: z.number().optional(),
+      budgetMax: z.number().optional(),
+      currency: z.string().optional(),
+      qualityPreference: z.string().optional(),
+      brandPreferences: z.array(z.string()).optional(),
+      brandExclusions: z.array(z.string()).optional(),
+    })
+    .optional(),
+});
 
 export async function devAuthRoutes(fastify: FastifyInstance) {
-  // Get current user - always returns dev user
-  fastify.get('/me', async () => {
-    // Ensure dev user exists
-    let user = await prisma.user.findUnique({
-      where: { id: DEV_USER_ID },
-      include: {
-        preferences: true,
-        subscription: true,
+  // Sign up
+  fastify.post('/signup', async (request, reply) => {
+    const body = signUpSchema.parse(request.body);
+
+    // Create user in Supabase
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email: body.email,
+      password: body.password,
+      email_confirm: true, // Auto-confirm in dev
+      user_metadata: {
+        full_name: body.name,
       },
     });
 
+    if (error) {
+      return reply.status(400).send({
+        error: 'Signup Failed',
+        message: error.message,
+      });
+    }
+
+    // Create user in our database with preferences
+    const defaultPreferences = {
+      categories: [] as string[],
+      budgetMin: 0,
+      budgetMax: 1000,
+      currency: 'USD',
+      qualityPreference: 'mid-range',
+      brandPreferences: [] as string[],
+      brandExclusions: [] as string[],
+    };
+
+    const mergedPreferences = { ...defaultPreferences, ...body.preferences };
+
+    await prisma.user.create({
+      data: {
+        id: data.user.id,
+        email: body.email,
+        name: body.name,
+        plan: 'free',
+        preferences: {
+          create: {
+            categories: JSON.stringify(mergedPreferences.categories),
+            budgetMin: mergedPreferences.budgetMin,
+            budgetMax: mergedPreferences.budgetMax,
+            currency: mergedPreferences.currency,
+            qualityPreference: mergedPreferences.qualityPreference,
+            brandPreferences: JSON.stringify(mergedPreferences.brandPreferences),
+            brandExclusions: JSON.stringify(mergedPreferences.brandExclusions),
+          },
+        },
+      },
+    });
+
+    return {
+      user: {
+        id: data.user.id,
+        email: data.user.email,
+        name: body.name,
+      },
+      message: 'Account created successfully. Please sign in.',
+    };
+  });
+
+  // Sign in
+  fastify.post('/signin', async (request, reply) => {
+    const body = signInSchema.parse(request.body);
+
+    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+      email: body.email,
+      password: body.password,
+    });
+
+    if (error) {
+      return reply.status(401).send({
+        error: 'Authentication Failed',
+        message: 'Invalid email or password',
+      });
+    }
+
+    return {
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+      expires_in: data.session.expires_in,
+      user: {
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.user_metadata?.full_name,
+        avatarUrl: data.user.user_metadata?.avatar_url,
+      },
+    };
+  });
+
+  // Google OAuth
+  fastify.post('/google', async (request, reply) => {
+    const body = googleAuthSchema.parse(request.body);
+
+    const { data, error } = await supabaseAdmin.auth.getUser(body.idToken);
+
+    if (error) {
+      return reply.status(401).send({
+        error: 'Authentication Failed',
+        message: 'Invalid Google token',
+      });
+    }
+
+    // Create or update user in our database
+    let user = await prisma.user.findUnique({
+      where: { id: data.user.id },
+    });
+
     if (!user) {
+      const defaultPreferences = {
+        categories: [] as string[],
+        budgetMin: 0,
+        budgetMax: 1000,
+        currency: 'USD',
+        qualityPreference: 'mid-range',
+        brandPreferences: [] as string[],
+        brandExclusions: [] as string[],
+      };
+
+      const mergedPreferences = { ...defaultPreferences, ...body.preferences };
+
       user = await prisma.user.create({
         data: {
-          id: DEV_USER_ID,
-          email: DEV_USER_EMAIL,
-          name: 'Dev User',
+          id: data.user.id,
+          email: data.user.email!,
+          name: data.user.user_metadata?.full_name,
+          avatarUrl: data.user.user_metadata?.avatar_url,
           plan: 'free',
           preferences: {
             create: {
-              categories: JSON.stringify(['electronics', 'audio', 'computing']),
-              budgetMin: 0,
-              budgetMax: 2000,
-              currency: 'USD',
-              qualityPreference: 'mid-range',
-              brandPreferences: JSON.stringify([]),
-              brandExclusions: JSON.stringify([]),
+              categories: JSON.stringify(mergedPreferences.categories),
+              budgetMin: mergedPreferences.budgetMin,
+              budgetMax: mergedPreferences.budgetMax,
+              currency: mergedPreferences.currency,
+              qualityPreference: mergedPreferences.qualityPreference,
+              brandPreferences: JSON.stringify(mergedPreferences.brandPreferences),
+              brandExclusions: JSON.stringify(mergedPreferences.brandExclusions),
             },
           },
         },
+      });
+    }
+
+    // Get a session token
+    const { data: sessionData, error: sessionError } = await supabaseAdmin.auth.admin.createSession({
+      user_id: data.user.id,
+    });
+
+    if (sessionError) {
+      return reply.status(500).send({
+        error: 'Session Creation Failed',
+        message: sessionError.message,
+      });
+    }
+
+    return {
+      access_token: sessionData.session.access_token,
+      refresh_token: sessionData.session.refresh_token,
+      expires_in: sessionData.session.expires_in,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+      },
+    };
+  });
+
+  // Refresh token
+  fastify.post('/refresh', async (request, reply) => {
+    const body = z.object({ refresh_token: z.string() }).parse(request.body);
+
+    const { data, error } = await supabaseAdmin.auth.refreshSession({
+      refresh_token: body.refresh_token,
+    });
+
+    if (error) {
+      return reply.status(401).send({
+        error: 'Refresh Failed',
+        message: 'Invalid refresh token',
+      });
+    }
+
+    return {
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+      expires_in: data.session.expires_in,
+    };
+  });
+
+  // Get current user
+  fastify.get(
+    '/me',
+    {
+      preHandler: authMiddleware,
+    },
+    async (request, reply) => {
+      const user = await prisma.user.findUnique({
+        where: { id: request.userId! },
         include: {
           preferences: true,
           subscription: true,
         },
       });
-    }
 
-    // Parse JSON arrays for SQLite compatibility
-    const preferences = user.preferences
-      ? {
-          categories: JSON.parse(user.preferences.categories as string),
-          budgetMin: user.preferences.budgetMin,
-          budgetMax: user.preferences.budgetMax,
-          currency: user.preferences.currency,
-          qualityPreference: user.preferences.qualityPreference,
-          brandPreferences: JSON.parse(user.preferences.brandPreferences as string),
-          brandExclusions: JSON.parse(user.preferences.brandExclusions as string),
-        }
-      : null;
+      if (!user) {
+        return reply.status(404).send({
+          error: 'User Not Found',
+          message: 'User not found in database',
+        });
+      }
 
-    return {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      avatarUrl: user.avatarUrl,
-      plan: user.plan,
-      preferences,
-      subscription: user.subscription
+      // Parse JSON arrays for SQLite compatibility
+      const preferences = user.preferences
         ? {
-            plan: user.subscription.plan,
-            status: user.subscription.status,
-            currentPeriodEnd: user.subscription.currentPeriodEnd,
+            categories: JSON.parse(user.preferences.categories as string),
+            budgetMin: user.preferences.budgetMin,
+            budgetMax: user.preferences.budgetMax,
+            currency: user.preferences.currency,
+            qualityPreference: user.preferences.qualityPreference,
+            brandPreferences: JSON.parse(user.preferences.brandPreferences as string),
+            brandExclusions: JSON.parse(user.preferences.brandExclusions as string),
           }
-        : null,
-      createdAt: user.createdAt,
-      _devMode: true,
-      _note: 'This is a development user. No real authentication is required.',
-    };
-  });
+        : null;
+
+      return {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        plan: user.plan,
+        preferences,
+        subscription: user.subscription
+          ? {
+              plan: user.subscription.plan,
+              status: user.subscription.status,
+              currentPeriodEnd: user.subscription.currentPeriodEnd,
+            }
+          : null,
+        createdAt: user.createdAt,
+      };
+    }
+  );
 
   // Mock logout
   fastify.post('/logout', async () => {

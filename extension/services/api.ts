@@ -60,6 +60,89 @@ class ApiClient {
   }
 
   // Auth endpoints
+  async signUp(data: {
+    email: string;
+    password: string;
+    name?: string;
+    preferences?: {
+      categories?: string[];
+      budgetMin?: number;
+      budgetMax?: number;
+      currency?: string;
+      qualityPreference?: string;
+      brandPreferences?: string[];
+      brandExclusions?: string[];
+    };
+  }) {
+    return this.request<{
+      user: {
+        id: string;
+        email: string;
+        name?: string;
+      };
+      message: string;
+    }>('/api/auth/signup', {
+      method: 'POST',
+      body: data,
+    });
+  }
+
+  async signIn(data: { email: string; password: string }) {
+    return this.request<{
+      access_token: string;
+      refresh_token: string;
+      expires_in: number;
+      user: {
+        id: string;
+        email: string;
+        name: string | null;
+        avatarUrl: string | null;
+      };
+    }>('/api/auth/signin', {
+      method: 'POST',
+      body: data,
+    });
+  }
+
+  async signInWithGoogle(data: {
+    idToken: string;
+    preferences?: {
+      categories?: string[];
+      budgetMin?: number;
+      budgetMax?: number;
+      currency?: string;
+      qualityPreference?: string;
+      brandPreferences?: string[];
+      brandExclusions?: string[];
+    };
+  }) {
+    return this.request<{
+      access_token: string;
+      refresh_token: string;
+      expires_in: number;
+      user: {
+        id: string;
+        email: string;
+        name: string | null;
+        avatarUrl: string | null;
+      };
+    }>('/api/auth/google', {
+      method: 'POST',
+      body: data,
+    });
+  }
+
+  async refreshToken(refreshToken: string) {
+    return this.request<{
+      access_token: string;
+      refresh_token: string;
+      expires_in: number;
+    }>('/api/auth/refresh', {
+      method: 'POST',
+      body: { refresh_token: refreshToken },
+    });
+  }
+
   async getMe() {
     return this.request<{
       id: string;
@@ -83,6 +166,12 @@ class ApiClient {
       } | null;
       createdAt: string;
     }>('/api/auth/me');
+  }
+
+  async logout() {
+    return this.request('/api/auth/logout', {
+      method: 'POST',
+    });
   }
 
   // User endpoints
