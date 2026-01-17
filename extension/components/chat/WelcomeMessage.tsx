@@ -1,6 +1,10 @@
 import React from 'react';
 
-export function WelcomeMessage() {
+interface WelcomeMessageProps {
+  onSuggestionClick?: (message: string) => void;
+}
+
+export function WelcomeMessage({ onSuggestionClick }: WelcomeMessageProps) {
   const suggestions = [
     'Best wireless headphones under $300',
     'Mechanical keyboard for coding',
@@ -9,41 +13,36 @@ export function WelcomeMessage() {
   ];
 
   return (
-    <div className="flex flex-col items-center justify-center h-full py-8">
-      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-shopii-primary to-shopii-secondary flex items-center justify-center mb-4">
-        <span className="text-white text-2xl font-bold">S</span>
+    <div className="flex flex-col items-center justify-center h-full px-6 py-12">
+      {/* Simple Icon/Logo */}
+      <div className="w-20 h-20 mb-6 rounded-3xl bg-glass backdrop-blur-md flex items-center justify-center shadow-glass">
+        <span className="text-4xl font-light text-accent-orange">S</span>
       </div>
 
-      <h2 className="text-xl font-semibold text-white mb-2">Welcome to Shopii</h2>
-      <p className="text-slate-400 text-center text-sm mb-6 max-w-xs">
-        Find products people actually love. I analyze Reddit, YouTube, and expert reviews to give you honest ratings.
+      {/* Heading */}
+      <h1 className="text-[32px] font-light text-text-primary mb-3 text-center leading-tight">
+        Find Products
+        <br />
+        You'll Love
+      </h1>
+
+      {/* Subtitle */}
+      <p className="text-base text-text-secondary text-center mb-10 max-w-xs">
+        Honest ratings from real people and expert reviews
       </p>
 
-      <div className="w-full space-y-2">
-        <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Try asking:</p>
+      {/* Suggestions */}
+      <div className="w-full space-y-2.5">
+        <p className="text-xs text-text-tertiary uppercase tracking-wide mb-3">Try asking</p>
         {suggestions.map((suggestion) => (
           <button
             key={suggestion}
-            className="w-full text-left px-4 py-3 bg-slate-800/50 hover:bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-300 hover:text-white transition-colors"
+            onClick={() => onSuggestionClick?.(suggestion)}
+            className="w-full text-left px-5 py-4 bg-glass backdrop-blur-md rounded-2xl text-sm text-text-secondary hover:shadow-glass transition-all duration-200 shadow-glass-sm hover:bg-glass-light"
           >
             "{suggestion}"
           </button>
         ))}
-      </div>
-
-      <div className="mt-8 flex items-center gap-4 text-xs text-slate-500">
-        <div className="flex items-center gap-1">
-          <RedditIcon className="w-4 h-4" />
-          <span>Reddit</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <YouTubeIcon className="w-4 h-4" />
-          <span>YouTube</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <ExpertIcon className="w-4 h-4" />
-          <span>Experts</span>
-        </div>
       </div>
     </div>
   );

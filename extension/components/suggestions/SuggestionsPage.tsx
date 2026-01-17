@@ -40,6 +40,11 @@ export function SuggestionsPage() {
 
       const response = await api.getSuggestions(pageNum, 20);
 
+      // Validate response structure
+      if (!response || !response.products || !Array.isArray(response.products)) {
+        throw new Error('Invalid response from suggestions API');
+      }
+
       const mappedProducts: ProductCard[] = response.products.map((p) => ({
         id: p.id,
         name: p.name,
@@ -52,8 +57,8 @@ export function SuggestionsPage() {
         aiRating: p.aiRating || 0,
         confidence: p.confidence || 0,
         matchScore: 75, // Default matchScore for suggestions
-        pros: p.pros,
-        cons: p.cons,
+        pros: p.pros || [],
+        cons: p.cons || [],
         affiliateUrl: p.affiliateUrl,
         retailer: p.retailer,
         isSponsored: p.isSponsored,
@@ -69,7 +74,7 @@ export function SuggestionsPage() {
       setLoadingMore(false);
       setError(null);
       setPage(pageNum);
-      setHasMore(response.pagination.hasMore);
+      setHasMore(response.pagination?.hasMore ?? false);
       setLastFetchedAt(Date.now());
 
       // Store learned preferences if available
@@ -130,10 +135,10 @@ export function SuggestionsPage() {
 
   if (isLoading && products.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="h-full flex items-center justify-center bg-background-primary">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-3 border-shopii-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-slate-400">Loading suggestions...</p>
+          <div className="w-8 h-8 border-4 border-accent-orange border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-text-tertiary">Loading suggestions...</p>
         </div>
       </div>
     );
@@ -141,12 +146,12 @@ export function SuggestionsPage() {
 
   if (error && products.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center p-4">
+      <div className="h-full flex items-center justify-center p-4 bg-background-primary">
         <div className="text-center">
-          <p className="text-red-400 mb-3">{error}</p>
+          <p className="text-red-600 mb-3">{error}</p>
           <button
             onClick={() => loadSuggestions(1)}
-            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition-colors"
+            className="px-4 py-2 bg-accent-orange hover:bg-accent-orange-dark text-white rounded-2xl text-sm transition-all shadow-sm"
           >
             Try Again
           </button>
@@ -157,10 +162,10 @@ export function SuggestionsPage() {
 
   if (products.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center p-4">
+      <div className="h-full flex items-center justify-center p-4 bg-background-primary">
         <div className="text-center">
-          <p className="text-slate-400 mb-2">No suggestions yet</p>
-          <p className="text-sm text-slate-500">
+          <p className="text-text-secondary mb-2">No suggestions yet</p>
+          <p className="text-sm text-text-tertiary">
             Start chatting to get personalized recommendations!
           </p>
         </div>
@@ -169,33 +174,19 @@ export function SuggestionsPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto" onScroll={handleScroll}>
+    <div className="h-full overflow-y-auto bg-background-primary" onScroll={handleScroll}>
       {/* Header */}
-      <div className="sticky top-0 bg-gradient-to-b from-slate-900 to-slate-900/95 backdrop-blur-sm px-4 py-4 border-b border-slate-700/50 z-10">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-white">For You</h2>
-            <p className="text-sm text-slate-400">Products tailored to your preferences</p>
-          </div>
-          <button
-            onClick={handleRefresh}
-            disabled={isLoading}
-            className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50"
-            title="Refresh suggestions"
-          >
-            <RefreshIcon className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
+      <div className="sticky top-0 bg-glass backdrop-blur-lg px-5 py-4 z-10 shadow-glass-sm">
         {/* Show learned preferences indicator */}
         {(learnedCategories.length > 0 || learnedBrands.length > 0) && (
-          <div className="mt-2 flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1.5">
             {learnedCategories.slice(0, 3).map((cat) => (
-              <span key={cat} className="text-xs px-2 py-0.5 bg-shopii-primary/20 text-shopii-primary rounded-full">
+              <span key={cat} className="text-xs px-2 py-0.5 bg-accent-orange/10 text-accent-orange backdrop-blur-sm rounded-full">
                 {cat}
               </span>
             ))}
             {learnedBrands.slice(0, 2).map((brand) => (
-              <span key={brand} className="text-xs px-2 py-0.5 bg-cyan-500/20 text-cyan-400 rounded-full">
+              <span key={brand} className="text-xs px-2 py-0.5 bg-accent-green/10 text-accent-green backdrop-blur-sm rounded-full">
                 {brand}
               </span>
             ))}
@@ -204,45 +195,47 @@ export function SuggestionsPage() {
       </div>
 
       {/* Products Grid */}
-      <div className="p-4 space-y-4">
+      <div className="px-6 py-6 space-y-8">
         {/* Trending Section */}
-        <div>
-          <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
-            <TrendingIcon className="w-4 h-4 text-shopii-accent" />
-            Recommended for You
-          </h3>
-          <div className="space-y-3">
+        <section>
+          <div className="space-y-4">
             {products.map((product) => (
               <ProductCardComponent key={product.id} product={product} />
             ))}
           </div>
-        </div>
+        </section>
 
         {/* Loading more indicator */}
         {isLoadingMore && (
           <div className="flex justify-center py-4">
-            <div className="w-6 h-6 border-2 border-shopii-primary border-t-transparent rounded-full animate-spin" />
+            <div className="w-6 h-6 border-4 border-accent-orange border-t-transparent rounded-full animate-spin" />
           </div>
         )}
 
         {/* Deal Alert - upgrade prompt */}
-        <div className="bg-gradient-to-r from-amber-900/30 to-orange-900/30 border border-amber-700/50 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <DealIcon className="w-5 h-5 text-amber-400" />
-            <h3 className="font-medium text-amber-200">Deal Alert</h3>
+        <div className="p-5 bg-glass backdrop-blur-md rounded-3xl shadow-glass-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-accent-orange/10 flex items-center justify-center flex-shrink-0">
+              <DealIcon className="w-5 h-5 text-accent-orange" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-text-primary mb-1">
+                Unlock More Features
+              </p>
+              <p className="text-xs text-text-secondary">
+                Get unlimited searches and personalized recommendations
+              </p>
+            </div>
+            <button className="px-4 py-2 bg-accent-orange hover:bg-accent-orange-dark text-white text-sm font-medium rounded-2xl transition-all shadow-sm">
+              Upgrade
+            </button>
           </div>
-          <p className="text-sm text-amber-100/80">
-            Upgrade to Pro to get notified when products you like go on sale!
-          </p>
-          <button className="mt-3 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm font-medium rounded-lg transition-colors">
-            Try Pro Free
-          </button>
         </div>
 
         {/* End of list message */}
         {!hasMore && products.length > 0 && (
           <div className="text-center py-8">
-            <p className="text-slate-500 text-sm">
+            <p className="text-text-tertiary text-sm">
               Keep chatting to improve your recommendations
             </p>
           </div>

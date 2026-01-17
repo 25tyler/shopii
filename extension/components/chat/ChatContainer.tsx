@@ -38,11 +38,11 @@ export function ChatContainer() {
   const canSendMessage = user || guestSearchesUsed < 5;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-background-primary">
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="flex-1 overflow-y-auto px-5 py-6">
         {messages.length === 0 ? (
-          <WelcomeMessage />
+          <WelcomeMessage onSuggestionClick={handleSendMessage} />
         ) : (
           <MessageList messages={messages} />
         )}
@@ -51,64 +51,47 @@ export function ChatContainer() {
 
       {/* Error Banner */}
       {error && (
-        <div className="mx-4 mb-2 px-4 py-2 bg-red-900/50 border border-red-700 rounded-lg flex items-center justify-between">
-          <span className="text-red-200 text-sm">{error}</span>
+        <div className="mx-5 mb-3 px-4 py-3 bg-red-50/80 backdrop-blur-sm rounded-2xl shadow-glass-sm flex items-center justify-between">
+          <span className="text-red-700 text-sm">{error}</span>
           <button
             onClick={clearError}
-            className="text-red-400 hover:text-red-200"
+            className="text-red-500 hover:text-red-700 transition-colors"
           >
             ✕
           </button>
         </div>
       )}
 
-      {/* Rate Limit Reached - Show Signup Prompt */}
-      {!user && guestSearchesUsed >= 5 ? (
-        <SignupPrompt searchesUsed={guestSearchesUsed} limit={5} />
-      ) : (
-        <>
-          {/* Search Limit Warning */}
-          {!user && guestSearchesUsed >= 3 && (
-            <div className="mx-4 mb-2 px-4 py-2 bg-amber-900/50 border border-amber-700 rounded-lg">
-              <p className="text-amber-200 text-sm">
-                {5 - guestSearchesUsed} searches remaining today.{' '}
-                <button
-                  onClick={() => setShowAuthModal(true)}
-                  className="underline hover:text-amber-100"
-                >
-                  Sign up for more
-                </button>
-              </p>
-            </div>
-          )}
-
-          {/* Input Area */}
-          <div className="p-4 border-t border-slate-700 bg-slate-900/50">
-            <ChatInput
-              onSend={handleSendMessage}
-              disabled={isLoading || !canSendMessage}
-              placeholder={
-                !canSendMessage
-                  ? "You've reached your daily limit. Sign up for more!"
-                  : 'Ask about any product...'
-              }
-            />
-            <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-              <span>
-                {!user && `${searchesRemaining} free searches left today`}
-              </span>
-              <span className="text-slate-600">Powered by AI</span>
-            </div>
-          </div>
-        </>
+      {/* Search Limit Warning */}
+      {!user && guestSearchesUsed >= 3 && guestSearchesUsed < 5 && (
+        <div className="mx-5 mb-3 px-4 py-3 bg-amber-50/80 backdrop-blur-sm rounded-2xl shadow-glass-sm">
+          <p className="text-amber-700 text-sm">
+            {5 - guestSearchesUsed} searches remaining today.{' '}
+            <button className="underline hover:text-amber-900">
+              Sign up for more
+            </button>
+          </p>
+        </div>
       )}
 
-      {/* Auth Modal */}
-      <AuthModal
-        isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-        defaultTab="signup"
-      />
+      {/* Input Area */}
+      <div className="p-5 bg-glass backdrop-blur-lg">
+        <ChatInput
+          onSend={handleSendMessage}
+          disabled={isLoading || !canSendMessage}
+          placeholder={
+            !canSendMessage
+              ? "You've reached your daily limit. Sign up for more!"
+              : 'Ask about any product...'
+          }
+        />
+        <div className="mt-2 flex items-center justify-between text-xs text-text-quaternary">
+          <span>
+            {!user && `${searchesRemaining} free searches left today`}
+          </span>
+          <span className="text-text-quaternary">Powered by AI</span>
+        </div>
+      </div>
     </div>
   );
 }

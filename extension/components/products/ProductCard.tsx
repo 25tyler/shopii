@@ -25,11 +25,11 @@ export function ProductCardComponent({ product }: ProductCardProps) {
   };
 
   return (
-    <div className="bg-slate-800/80 rounded-xl border border-slate-700 overflow-hidden hover:border-slate-600 transition-colors">
+    <div className="bg-glass backdrop-blur-md rounded-3xl hover:shadow-glass transition-all overflow-hidden shadow-glass-sm">
       {/* Product Header */}
-      <div className="p-3 flex gap-3">
+      <div className="p-4 flex gap-3">
         {/* Image */}
-        <div className="w-20 h-20 bg-slate-700 rounded-lg overflow-hidden flex-shrink-0">
+        <div className="w-24 h-24 bg-glass-dark backdrop-blur-sm rounded-2xl overflow-hidden flex-shrink-0">
           {product.imageUrl ? (
             <img
               src={product.imageUrl}
@@ -37,88 +37,93 @@ export function ProductCardComponent({ product }: ProductCardProps) {
               className="w-full h-full object-cover"
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-slate-500">
-              <ImagePlaceholder className="w-8 h-8" />
+            <div className="w-full h-full flex items-center justify-center text-text-quaternary">
+              <ImagePlaceholder className="w-10 h-10" />
             </div>
           )}
         </div>
 
         {/* Info */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="font-medium text-white text-sm leading-tight line-clamp-2">
+          <div className="flex items-start justify-between gap-2 mb-2">
+            <h3 className="font-medium text-text-primary text-base leading-tight">
               {product.name}
             </h3>
             <RatingBadge rating={product.aiRating} size="sm" />
           </div>
-          <p className="text-lg font-semibold text-white mt-1">
+          <p className="text-lg font-semibold text-text-primary mt-1">
             {product.price.amount !== null ? `$${product.price.amount.toFixed(2)}` : 'Price varies'}
           </p>
-          <p className="text-xs text-slate-400">{product.retailer}</p>
+          <p className="text-xs text-text-tertiary">{product.retailer}</p>
         </div>
       </div>
 
       {/* Sponsored Badge */}
       {product.isSponsored && (
-        <div className="px-3 pb-1">
-          <span className="text-xs text-slate-500 bg-slate-700/50 px-2 py-0.5 rounded">
+        <div className="px-4 pb-2">
+          <span className="text-xs text-text-tertiary bg-glass-dark backdrop-blur-sm px-2 py-1 rounded-lg">
             Sponsored
           </span>
         </div>
       )}
 
       {/* Description */}
-      <div className="px-3 pb-3">
-        <p className="text-xs text-slate-300 line-clamp-2">{product.description}</p>
+      <div className="px-4 pb-3">
+        <p className="text-sm text-text-secondary line-clamp-2">{product.description}</p>
       </div>
 
-      {/* Expandable Pros/Cons */}
+      {/* Expandable Pros/Cons Toggle */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full px-3 py-2 text-xs text-slate-400 hover:text-slate-300 border-t border-slate-700 flex items-center justify-center gap-1 transition-colors"
+        className="w-full px-4 py-3 text-sm text-text-secondary hover:bg-glass-dark/30 backdrop-blur-sm flex items-center justify-center gap-2 transition-all"
       >
         {isExpanded ? 'Hide details' : 'Show pros & cons'}
         <ChevronIcon className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
       </button>
 
+      {/* Expanded Content */}
       {isExpanded && (
-        <div className="px-3 pb-3 border-t border-slate-700 pt-3 animate-fade-in">
+        <div className="px-4 pb-4 pt-3 animate-fade-in bg-glass-light/30 backdrop-blur-sm">
           {/* Pros */}
-          <div className="mb-3">
-            <p className="text-xs font-medium text-green-400 mb-1">Pros</p>
-            <ul className="space-y-1">
-              {product.pros.map((pro, i) => (
-                <li key={i} className="text-xs text-slate-300 flex items-start gap-1">
-                  <span className="text-green-400 mt-0.5">✓</span>
-                  {pro}
-                </li>
-              ))}
-            </ul>
-          </div>
+          {product.pros && product.pros.length > 0 && (
+            <div className="mb-4">
+              <p className="text-xs font-medium text-accent-green mb-2">Pros</p>
+              <ul className="space-y-1.5">
+                {product.pros.map((pro, i) => (
+                  <li key={i} className="text-sm text-text-secondary flex gap-2">
+                    <CheckIcon className="w-4 h-4 text-accent-green flex-shrink-0 mt-0.5" />
+                    <span>{pro}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Cons */}
-          <div>
-            <p className="text-xs font-medium text-red-400 mb-1">Cons</p>
-            <ul className="space-y-1">
-              {product.cons.map((con, i) => (
-                <li key={i} className="text-xs text-slate-300 flex items-start gap-1">
-                  <span className="text-red-400 mt-0.5">✗</span>
-                  {con}
-                </li>
-              ))}
-            </ul>
-          </div>
+          {product.cons && product.cons.length > 0 && (
+            <div className="mb-4">
+              <p className="text-xs font-medium text-accent-red mb-2">Cons</p>
+              <ul className="space-y-1.5">
+                {product.cons.map((con, i) => (
+                  <li key={i} className="text-sm text-text-secondary flex gap-2">
+                    <XIcon className="w-4 h-4 text-accent-red flex-shrink-0 mt-0.5" />
+                    <span>{con}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Rating Details */}
-          <div className="mt-3 pt-3 border-t border-slate-700 space-y-1">
-            <div className="flex justify-between text-xs">
-              <span className="text-slate-500">Quality Score:</span>
-              <span className="text-slate-300 font-medium">{product.aiRating}/100</span>
+          <div className="pt-3 space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-text-tertiary">Quality Score</span>
+              <span className="font-medium text-text-primary">{product.aiRating}/100</span>
             </div>
             {product.matchScore !== undefined && (
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-500">Query Match:</span>
-                <span className="text-cyan-400 font-medium">{product.matchScore}%</span>
+              <div className="flex justify-between text-sm">
+                <span className="text-text-tertiary">Match</span>
+                <span className="font-medium text-accent-orange">{product.matchScore}%</span>
               </div>
             )}
           </div>
@@ -126,10 +131,10 @@ export function ProductCardComponent({ product }: ProductCardProps) {
       )}
 
       {/* Buy Button */}
-      <div className="p-3 border-t border-slate-700">
+      <div className="p-4">
         <button
           onClick={handleBuyClick}
-          className="w-full py-2.5 bg-gradient-to-r from-shopii-primary to-shopii-secondary hover:from-shopii-primary/90 hover:to-shopii-secondary/90 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+          className="w-full py-3 bg-accent-orange hover:bg-accent-orange-dark text-white text-sm font-medium rounded-2xl transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-md"
         >
           View on {product.retailer}
           <ExternalLinkIcon className="w-4 h-4" />
@@ -139,10 +144,27 @@ export function ProductCardComponent({ product }: ProductCardProps) {
   );
 }
 
+// Icons
 function ChevronIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+    </svg>
+  );
+}
+
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+    </svg>
+  );
+}
+
+function XIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
     </svg>
   );
 }

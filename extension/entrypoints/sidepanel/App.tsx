@@ -2,13 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { ChatContainer } from '../../components/chat/ChatContainer';
 import { SuggestionsPage } from '../../components/suggestions/SuggestionsPage';
 import { OnboardingFlow } from '../../components/onboarding/OnboardingFlow';
-import { UserButton } from '../../components/auth/UserButton';
 import { useUserStore } from '../../stores/userStore';
 
-type Tab = 'chat' | 'suggestions';
+type Route = 'search' | 'saved' | 'for-you';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>('chat');
+  const [activeRoute, setActiveRoute] = useState<Route>('search');
   const { isOnboarded, isLoading, initialize } = useUserStore();
 
   useEffect(() => {
@@ -17,10 +16,10 @@ export default function App() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex items-center justify-center h-full bg-background-primary">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-shopii-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-slate-400">Loading Shopii...</p>
+          <div className="w-12 h-12 border-4 border-accent-orange border-t-transparent rounded-full animate-spin" />
+          <p className="text-text-tertiary">Loading Shopii...</p>
         </div>
       </div>
     );
@@ -31,59 +30,171 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-full relative">
+    <div className="flex flex-col h-full relative bg-background-primary">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-slate-700 bg-slate-900/50 backdrop-blur-sm">
+      <header className="h-14 px-5 bg-glass backdrop-blur-lg flex items-center justify-between flex-shrink-0 shadow-glass-sm">
+        {/* Logo */}
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-shopii-primary to-shopii-secondary flex items-center justify-center">
-            <span className="text-white font-bold text-sm">S</span>
+          <div className="w-7 h-7 rounded-xl bg-glass backdrop-blur-md flex items-center justify-center shadow-glass-sm">
+            <span className="text-accent-orange font-medium text-lg">S</span>
           </div>
-          <h1 className="text-lg font-semibold text-white">Shopii</h1>
+          <h1 className="text-base font-medium text-text-primary">Shopii</h1>
         </div>
-        <div className="flex items-center gap-2">
-          <UserButton />
-        </div>
+
+        {/* Navigation buttons - centered in pill */}
+        <nav className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 bg-glass-dark backdrop-blur-md rounded-full p-1 shadow-glass-sm">
+          <NavButton
+            icon={SearchIcon}
+            active={activeRoute === 'search'}
+            onClick={() => setActiveRoute('search')}
+            title="Search"
+          />
+          <NavButton
+            icon={TrendingIcon}
+            active={activeRoute === 'for-you'}
+            onClick={() => setActiveRoute('for-you')}
+            title="For You"
+          />
+          <NavButton
+            icon={StarIcon}
+            active={activeRoute === 'saved'}
+            onClick={() => setActiveRoute('saved')}
+            title="Saved"
+          />
+        </nav>
+
+        {/* Settings */}
+        <button
+          className="p-2 hover:bg-glass backdrop-blur-sm rounded-xl transition-all shadow-glass-sm"
+          title="Settings"
+        >
+          <SettingsIcon className="w-5 h-5 text-text-tertiary" />
+        </button>
       </header>
 
-      {/* Tab Navigation */}
-      <nav className="flex border-b border-slate-700 bg-slate-900/30">
-        <button
-          onClick={() => setActiveTab('chat')}
-          className={`flex-1 py-3 text-sm font-medium transition-colors relative ${
-            activeTab === 'chat'
-              ? 'text-white'
-              : 'text-slate-400 hover:text-slate-200'
+      {/* Content - Both components stay mounted to preserve state */}
+      <div className="flex-1 overflow-hidden relative">
+        <div
+          className={`absolute inset-0 transition-all duration-300 ease-out ${
+            activeRoute === 'search' ? 'opacity-100 visible translate-x-0' : 'opacity-0 invisible translate-x-4'
           }`}
         >
-          Chat
-          {activeTab === 'chat' && (
-            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-shopii-primary to-shopii-secondary" />
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab('suggestions')}
-          className={`flex-1 py-3 text-sm font-medium transition-colors relative ${
-            activeTab === 'suggestions'
-              ? 'text-white'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          For You
-          {activeTab === 'suggestions' && (
-            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-shopii-primary to-shopii-secondary" />
-          )}
-        </button>
-      </nav>
-
-      {/* Main Content - Both components stay mounted to preserve state */}
-      <main className="flex-1 overflow-hidden relative">
-        <div className={`absolute inset-0 ${activeTab === 'chat' ? 'visible' : 'invisible'}`}>
           <ChatContainer />
         </div>
-        <div className={`absolute inset-0 ${activeTab === 'suggestions' ? 'visible' : 'invisible'}`}>
+        <div
+          className={`absolute inset-0 transition-all duration-300 ease-out ${
+            activeRoute === 'for-you' ? 'opacity-100 visible translate-x-0' : 'opacity-0 invisible translate-x-4'
+          }`}
+        >
           <SuggestionsPage />
         </div>
-      </main>
+        {/* Placeholder screen for saved */}
+        <div
+          className={`absolute inset-0 transition-all duration-300 ease-out ${
+            activeRoute === 'saved' ? 'opacity-100 visible translate-x-0' : 'opacity-0 invisible translate-x-4'
+          }`}
+        >
+          <PlaceholderScreen title="Saved Products" description="Your saved products will appear here" />
+        </div>
+      </div>
     </div>
+  );
+}
+
+function NavButton({
+  icon: Icon,
+  active,
+  onClick,
+  title,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  active: boolean;
+  onClick: () => void;
+  title: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      className={`
+        px-3 h-8 flex items-center justify-center rounded-full
+        transition-all duration-200 ease-out
+        ${
+          active
+            ? 'bg-accent-orange text-white shadow-sm'
+            : 'text-text-tertiary hover:bg-glass-dark backdrop-blur-sm'
+        }
+      `}
+    >
+      <Icon className="w-5 h-5" />
+    </button>
+  );
+}
+
+function PlaceholderScreen({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full px-8 py-12 bg-background-primary">
+      <div className="w-16 h-16 rounded-3xl bg-glass backdrop-blur-md flex items-center justify-center mb-6 shadow-glass">
+        <span className="text-3xl">📦</span>
+      </div>
+      <h2 className="text-xl font-light text-text-primary mb-2">{title}</h2>
+      <p className="text-sm text-text-secondary text-center max-w-xs">{description}</p>
+    </div>
+  );
+}
+
+// Icons
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+      />
+    </svg>
+  );
+}
+
+function StarIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
+      />
+    </svg>
+  );
+}
+
+function TrendingIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+    </svg>
+  );
+}
+
+function SettingsIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+      />
+    </svg>
   );
 }
