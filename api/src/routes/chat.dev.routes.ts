@@ -199,7 +199,7 @@ export async function devChatRoutes(fastify: FastifyInstance) {
           imageUrl: p.imageUrl || '',
           price: p.estimatedPrice
             ? {
-                amount: parseFloat(p.estimatedPrice.replace(/[^0-9.]/g, '')) || 0,
+                amount: parseFloat(String(p.estimatedPrice).replace(/[^0-9.]/g, '')) || 0,
                 currency: 'USD',
               }
             : { amount: 0, currency: 'USD' },
