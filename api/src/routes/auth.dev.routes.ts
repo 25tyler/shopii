@@ -1,11 +1,10 @@
-// Development auth routes - uses real Supabase authentication
+// Development auth routes - uses mock authentication (no Supabase needed)
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../config/prisma.js';
-import { supabaseAdmin } from '../config/supabase.js';
-import { authMiddleware } from '../middleware/auth.middleware.js';
+import { authMiddleware, DEV_USER_EMAIL, DEV_USER_ID } from '../middleware/auth.dev.js';
 import { z } from 'zod';
 import { formatArray, parseArray } from '@/utils/db-helpers.js';
-import { DEV_USER_EMAIL, DEV_USER_ID } from '@/middleware/auth.dev.js';
+import crypto from 'crypto';
 
 // Validation schemas
 const signUpSchema = z.object({
@@ -46,24 +45,19 @@ const googleAuthSchema = z.object({
 });
 
 export async function devAuthRoutes(fastify: FastifyInstance) {
-  // Sign up
+  // Sign up - creates user directly in database (no Supabase)
   fastify.post('/signup', async (request, reply) => {
     const body = signUpSchema.parse(request.body);
 
-    // Create user in Supabase
-    const { data, error } = await supabaseAdmin.auth.admin.createUser({
-      email: body.email,
-      password: body.password,
-      email_confirm: true, // Auto-confirm in dev
-      user_metadata: {
-        full_name: body.name,
-      },
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: body.email },
     });
 
-    if (error) {
+    if (existingUser) {
       return reply.status(400).send({
         error: 'Signup Failed',
-        message: error.message,
+        message: 'User with this email already exists',
       });
     }
 
@@ -79,10 +73,11 @@ export async function devAuthRoutes(fastify: FastifyInstance) {
     };
 
     const mergedPreferences = { ...defaultPreferences, ...body.preferences };
+    const userId = crypto.randomUUID();
 
-    await prisma.user.create({
+    const user = await prisma.user.create({
       data: {
-        id: data.user.id,
+        id: userId,
         email: body.email,
         name: body.name,
         plan: 'free',
@@ -102,98 +97,88 @@ export async function devAuthRoutes(fastify: FastifyInstance) {
 
     return {
       user: {
-        id: data.user.id,
-        email: data.user.email,
+        id: user.id,
+        email: user.email,
         name: body.name,
       },
       message: 'Account created successfully. Please sign in.',
     };
   });
 
-  // Sign in
+  // Sign in - mock authentication (accepts any password in dev mode)
   fastify.post('/signin', async (request, reply) => {
     const body = signInSchema.parse(request.body);
 
-    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
-      email: body.email,
-      password: body.password,
+    // Find user by email
+    const user = await prisma.user.findUnique({
+      where: { email: body.email },
     });
 
-    if (error) {
+    if (!user) {
       return reply.status(401).send({
         error: 'Authentication Failed',
         message: 'Invalid email or password',
       });
     }
 
+    // In dev mode, generate mock JWT tokens
+    const accessToken = `dev_access_${user.id}_${Date.now()}`;
+    const refreshToken = `dev_refresh_${user.id}_${Date.now()}`;
+
     return {
-      access_token: data.session.access_token,
-      refresh_token: data.session.refresh_token,
-      expires_in: data.session.expires_in,
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_in: 3600,
       user: {
-        id: data.user.id,
-        email: data.user.email,
-        name: data.user.user_metadata?.full_name,
-        avatarUrl: data.user.user_metadata?.avatar_url,
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
       },
     };
   });
 
-  // Google OAuth
+  // Google OAuth - mock implementation
   fastify.post('/google', async (request, reply) => {
     const body = googleAuthSchema.parse(request.body);
 
-    const { data, error } = await supabaseAdmin.auth.getUser(body.idToken);
+    // In dev mode, create or get user based on a mock Google response
+    // The idToken would normally be validated against Google
+    const mockEmail = `google_${Date.now()}@shopii.test`;
 
-    if (error) {
-      return reply.status(401).send({
-        error: 'Authentication Failed',
-        message: 'Invalid Google token',
-      });
-    }
+    const defaultPreferences = {
+      categories: [] as string[],
+      budgetMin: 0,
+      budgetMax: 1000,
+      currency: 'USD',
+      qualityPreference: 'mid-range',
+      brandPreferences: [] as string[],
+      brandExclusions: [] as string[],
+    };
 
-    // Create or update user in our database
-    let user = await prisma.user.findUnique({
-      where: { id: data.user.id },
-    });
+    const mergedPreferences = { ...defaultPreferences, ...body.preferences };
+    const userId = crypto.randomUUID();
 
-    if (!user) {
-      const defaultPreferences = {
-        categories: [] as string[],
-        budgetMin: 0,
-        budgetMax: 1000,
-        currency: 'USD',
-        qualityPreference: 'mid-range',
-        brandPreferences: [] as string[],
-        brandExclusions: [] as string[],
-      };
-
-      const mergedPreferences = { ...defaultPreferences, ...body.preferences };
-
-      user = await prisma.user.create({
-        data: {
-          id: data.user.id,
-          email: data.user.email!,
-          name: data.user.user_metadata?.full_name,
-          avatarUrl: data.user.user_metadata?.avatar_url,
-          plan: 'free',
-          preferences: {
-            create: {
-              categories: formatArray(mergedPreferences.categories) as any,
-              budgetMin: mergedPreferences.budgetMin,
-              budgetMax: mergedPreferences.budgetMax,
-              currency: mergedPreferences.currency,
-              qualityPreference: mergedPreferences.qualityPreference,
-              brandPreferences: formatArray(mergedPreferences.brandPreferences) as any,
-              brandExclusions: formatArray(mergedPreferences.brandExclusions) as any,
-            },
+    const user = await prisma.user.create({
+      data: {
+        id: userId,
+        email: mockEmail,
+        name: 'Google User',
+        plan: 'free',
+        preferences: {
+          create: {
+            categories: formatArray(mergedPreferences.categories) as any,
+            budgetMin: mergedPreferences.budgetMin,
+            budgetMax: mergedPreferences.budgetMax,
+            currency: mergedPreferences.currency,
+            qualityPreference: mergedPreferences.qualityPreference,
+            brandPreferences: formatArray(mergedPreferences.brandPreferences) as any,
+            brandExclusions: formatArray(mergedPreferences.brandExclusions) as any,
           },
         },
-      });
-    }
+      },
+    });
 
-    // For dev mode, generate simple session tokens
-    // In production, this would use proper Supabase session creation
     const devAccessToken = `dev_access_${user.id}_${Date.now()}`;
     const devRefreshToken = `dev_refresh_${user.id}_${Date.now()}`;
 
@@ -210,25 +195,28 @@ export async function devAuthRoutes(fastify: FastifyInstance) {
     };
   });
 
-  // Refresh token
+  // Refresh token - mock implementation
   fastify.post('/refresh', async (request, reply) => {
     const body = z.object({ refresh_token: z.string() }).parse(request.body);
 
-    const { data, error } = await supabaseAdmin.auth.refreshSession({
-      refresh_token: body.refresh_token,
-    });
-
-    if (error || !data.session) {
+    // In dev mode, just generate new mock tokens
+    // Extract user ID from the refresh token if it follows our dev format
+    const match = body.refresh_token.match(/dev_refresh_([^_]+)_/);
+    if (!match) {
       return reply.status(401).send({
         error: 'Refresh Failed',
         message: 'Invalid refresh token',
       });
     }
 
+    const userId = match[1];
+    const newAccessToken = `dev_access_${userId}_${Date.now()}`;
+    const newRefreshToken = `dev_refresh_${userId}_${Date.now()}`;
+
     return {
-      access_token: data.session.access_token,
-      refresh_token: data.session.refresh_token,
-      expires_in: data.session.expires_in,
+      access_token: newAccessToken,
+      refresh_token: newRefreshToken,
+      expires_in: 3600,
     };
   });
 

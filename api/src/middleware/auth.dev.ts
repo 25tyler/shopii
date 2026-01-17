@@ -18,9 +18,17 @@ declare module 'fastify' {
 
 // Create or get the development user
 async function getOrCreateDevUser(): Promise<User> {
+  // First try to find by ID
   let user = await prisma.user.findUnique({
     where: { id: DEV_USER_ID },
   });
+
+  // If not found by ID, try by email (in case user was created without the expected ID)
+  if (!user) {
+    user = await prisma.user.findUnique({
+      where: { email: DEV_USER_EMAIL },
+    });
+  }
 
   if (!user) {
     user = await prisma.user.create({

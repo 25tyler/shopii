@@ -152,7 +152,7 @@ model Message {
   conversationId String   @map("conversation_id") @db.Uuid
   role           String   @db.VarChar(20)
   content        String
-  productsShown  String[] @default([]) @map("products_shown") @db.Uuid
+  productsShown  String[] @default([]) @map("products_shown")
   metadata       Json?
   createdAt      DateTime @default(now()) @map("created_at")
 
