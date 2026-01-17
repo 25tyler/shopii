@@ -269,12 +269,13 @@ export async function devChatRoutes(fastify: FastifyInstance) {
       }
 
       // Look up actual product URLs in parallel
-      // We try to find real product pages, but include products even if URL lookup fails
+      // We try to find real product pages and extract prices from them
       const productsWithUrls = await Promise.all(
         extractedProducts.map(async (p) => {
-          // Try to get a real product URL
+          // Try to get a real product URL and price
           let affiliateUrl = '';
           let retailer = p.retailer || 'Store';
+          let actualPrice: string | null = null;
 
           try {
             const urlInfo = await getPurchaseUrl(
@@ -287,7 +288,9 @@ export async function devChatRoutes(fastify: FastifyInstance) {
             if (urlInfo && urlInfo.url) {
               affiliateUrl = urlInfo.url;
               retailer = urlInfo.retailer;
-              fastify.log.info(`[Chat] Found product URL for ${p.name}: ${affiliateUrl}`);
+              // Use the actual price from the product page if available
+              actualPrice = urlInfo.price;
+              fastify.log.info(`[Chat] Found product URL for ${p.name}: ${affiliateUrl}, price: ${actualPrice}`);
             } else {
               // Fallback: Amazon search URL with affiliate tag (better than nothing)
               const searchTerm = p.brand ? `${p.brand} ${p.name}` : p.name;
@@ -303,6 +306,9 @@ export async function devChatRoutes(fastify: FastifyInstance) {
             fastify.log.info(`[Chat] URL lookup failed for ${p.name}, using Amazon search fallback`);
           }
 
+          // Use actual price from product page, fall back to estimated price only if needed
+          const finalPrice = actualPrice || p.estimatedPrice;
+
           return {
             id: `${p.brand}-${p.name}`.toLowerCase().replace(/\s+/g, '-'),
             name: p.name,
@@ -310,7 +316,7 @@ export async function devChatRoutes(fastify: FastifyInstance) {
             description: p.description || '',
             imageUrl: p.imageUrl || '',
             price: {
-              amount: parsePrice(p.estimatedPrice),
+              amount: parsePrice(finalPrice),
               currency: 'USD',
             },
             pros: p.pros || [],

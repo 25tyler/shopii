@@ -191,14 +191,128 @@ function getRetailerFromUrl(url: string): string {
   }
 }
 
+// Extract price from text content (Tavily result or page content)
+// Very conservative - only returns prices we're confident about
+// Prices should come from actual product pages, not random numbers in content
+function extractPriceFromContent(content: string, productName: string): string | null {
+  if (!content) return null;
+
+  // Look for prices explicitly labeled as "price", "cost", "$X.XX" near product-related context
+  // We want to avoid picking up random numbers like shipping costs, ratings, counts, etc.
+
+  // Priority 1: Look for explicitly labeled current prices (most reliable)
+  const labeledPricePatterns = [
+    /(?:current\s+price|price|our\s+price|sale\s+price|now)[:\s]*\$(\d{1,4}\.\d{2})\b/gi,
+    /\$(\d{1,4}\.\d{2})\s*(?:USD|usd)?(?:\s*-\s*|\s+)(?:free\s+shipping|in\s+stock|add\s+to\s+cart)/gi,
+  ];
+
+  for (const pattern of labeledPricePatterns) {
+    let match;
+    while ((match = pattern.exec(content)) !== null) {
+      const price = parseFloat(match[1]);
+      // Filter for reasonable consumer product prices
+      if (price >= 4.99 && price <= 3000) {
+        console.log(`[PriceExtract] Found labeled price: $${price}`);
+        return `$${price.toFixed(2)}`;
+      }
+    }
+  }
+
+  // Priority 2: If we find multiple prices with .99 or .95 endings (common retail pricing)
+  // these are more likely to be actual product prices
+  const retailPricePattern = /\$(\d{1,4}\.(?:99|95|49|00))\b/g;
+  const retailPrices: number[] = [];
+  let match;
+
+  while ((match = retailPricePattern.exec(content)) !== null) {
+    const price = parseFloat(match[1]);
+    if (price >= 4.99 && price <= 3000) {
+      retailPrices.push(price);
+    }
+  }
+
+  // Only use retail prices if we found at least 2 (more confident)
+  // and take the most common one
+  if (retailPrices.length >= 2) {
+    // Find the most common price
+    const priceCount = new Map<number, number>();
+    for (const price of retailPrices) {
+      priceCount.set(price, (priceCount.get(price) || 0) + 1);
+    }
+
+    let bestPrice = retailPrices[0];
+    let maxCount = 0;
+    for (const [price, count] of priceCount) {
+      if (count > maxCount) {
+        maxCount = count;
+        bestPrice = price;
+      }
+    }
+
+    console.log(`[PriceExtract] Found ${retailPrices.length} retail prices, most common: $${bestPrice} (${maxCount}x)`);
+    return `$${bestPrice.toFixed(2)}`;
+  }
+
+  // No reliable price found - better to show "Price varies" than a wrong price
+  return null;
+}
+
+// Check if URL is from a major retailer where we can reliably extract prices
+function isRetailProductPage(url: string): boolean {
+  const urlLower = url.toLowerCase();
+  const retailDomains = [
+    'amazon.com',
+    'bestbuy.com',
+    'walmart.com',
+    'target.com',
+    'costco.com',
+    'newegg.com',
+    'bhphotovideo.com',
+    'adorama.com',
+  ];
+  return retailDomains.some(domain => urlLower.includes(domain));
+}
+
+// Fetch actual price from a product page URL using Tavily extract
+async function fetchPriceFromProductPage(url: string, productName: string): Promise<string | null> {
+  try {
+    const client = getTavily();
+
+    // Use Tavily extract to get structured content from the product page
+    const response = await client.extract([url], {
+      includeImages: false,
+    });
+
+    if (response.results && response.results.length > 0) {
+      const content = response.results[0].rawContent || '';
+      console.log(`[PriceExtract] Extracted ${content.length} chars from ${url}`);
+      console.log(`[PriceExtract] Content preview: ${content.slice(0, 500)}`);
+      // Try to extract price from the actual page content
+      const price = extractPriceFromContent(content, productName);
+      if (price) {
+        console.log(`[PriceExtract] Got price ${price} from page: ${url}`);
+        return price;
+      } else {
+        console.log(`[PriceExtract] No price found in extracted content`);
+      }
+    } else {
+      console.log(`[PriceExtract] No results from extract for ${url}`);
+    }
+  } catch (error) {
+    console.log(`[PriceExtract] Failed to extract from ${url}: ${error}`);
+  }
+  return null;
+}
+
 // Look up actual product URL using Tavily search
 // Priority: 1) Brand official store, 2) Recommended retailer, 3) Any product page
 // NEVER returns search URLs - only actual product pages
+// Also extracts price from the product page content
 export async function lookupProductUrl(
   productName: string,
   brand: string,
   preferredRetailer?: string
-): Promise<{ url: string; retailer: string } | null> {
+): Promise<{ url: string; retailer: string; price: string | null } | null> {
   try {
     const client = getTavily();
 
@@ -267,8 +381,18 @@ export async function lookupProductUrl(
             if (isNotSearchOrCategoryPage(result.url)) {
               const finalUrl = addAmazonAffiliateTag(result.url);
               const retailer = getRetailerFromUrl(result.url);
-              console.log(`[ProductURL] Found product page (${priority}): ${finalUrl}`);
-              return { url: finalUrl, retailer };
+              // Try to extract price from the Tavily result content first (fast)
+              let price = extractPriceFromContent(result.content || '', productName);
+
+              // If no price from search snippet, try fetching from the actual page
+              // Only do this for retailers likely to have prices (Amazon, Best Buy, etc.)
+              if (!price && isRetailProductPage(result.url)) {
+                console.log(`[ProductURL] No price in snippet for ${productName}, fetching from page: ${result.url}`);
+                price = await fetchPriceFromProductPage(result.url, productName);
+              }
+
+              console.log(`[ProductURL] Found product page (${priority}): ${finalUrl}, price: ${price}`);
+              return { url: finalUrl, retailer, price };
             }
           }
         }
@@ -288,21 +412,23 @@ export async function lookupProductUrl(
 
 // Main function to get purchase URL - tries lookup first
 // Returns null if no actual product page can be found (never returns search URLs)
+// Also returns the price extracted from the product page
 export async function getPurchaseUrl(
   productName: string,
   brand: string,
   recommendedRetailer?: string,
   existingUrl?: string | null
-): Promise<{ url: string; retailer: string } | null> {
+): Promise<{ url: string; retailer: string; price: string | null } | null> {
   // If we already have a direct product URL, validate and use it
   if (existingUrl && isNotSearchOrCategoryPage(existingUrl)) {
     const finalUrl = addAmazonAffiliateTag(existingUrl);
     const retailer = getRetailerFromUrl(existingUrl);
     console.log(`[ProductURL] Using existing product URL: ${finalUrl}`);
-    return { url: finalUrl, retailer };
+    // No price available for existing URLs without fetching
+    return { url: finalUrl, retailer, price: null };
   }
 
-  // Try to look up actual product URL
+  // Try to look up actual product URL (also extracts price from page content)
   const lookedUpUrl = await lookupProductUrl(productName, brand, recommendedRetailer);
   return lookedUpUrl; // Returns null if not found - NO fallback to search URLs
 }
@@ -646,6 +772,7 @@ export async function enhanceProductsWithEnrichment(
 }
 
 // Enhance a single product with additional context
+// NOTE: This function does NOT handle prices - prices are extracted from actual product pages
 async function enhanceSingleProduct(
   product: ExtractedProduct,
   enrichmentContext: string
@@ -658,7 +785,6 @@ Brand: ${product.brand}
 Description: ${product.description}
 Current Pros: ${JSON.stringify(product.pros)}
 Current Cons: ${JSON.stringify(product.cons)}
-Price: ${product.estimatedPrice || 'Unknown'}
 
 ADDITIONAL RESEARCH:
 ${enrichmentContext}
@@ -671,9 +797,7 @@ Based on the additional research, provide enhanced QUERY-AGNOSTIC information (s
 
 3. cons: Array of GENERAL product weaknesses (0-4 items). OK to return empty array if none mentioned.
 
-4. estimatedPrice: Price if found, or best estimate (e.g., "$299", "$150-200")
-
-Return a JSON object with these 4 fields only. No markdown.`;
+Return a JSON object with these 3 fields only. Do NOT include price. No markdown.`;
 
   try {
     const response = await getOpenAI().chat.completions.create({
@@ -684,7 +808,7 @@ Return a JSON object with these 4 fields only. No markdown.`;
         {
           role: 'system',
           content:
-            'You are a product database analyst. Write QUERY-AGNOSTIC descriptions that work regardless of how someone found this product. Be specific and avoid generic descriptions.',
+            'You are a product database analyst. Write QUERY-AGNOSTIC descriptions that work regardless of how someone found this product. Be specific and avoid generic descriptions. Do NOT include prices - those come from the actual product pages.',
         },
         { role: 'user', content: prompt },
       ],
@@ -700,12 +824,13 @@ Return a JSON object with these 4 fields only. No markdown.`;
 
     const enhanced = JSON.parse(jsonContent);
 
+    // Do NOT use enhanced.estimatedPrice - prices come from actual product pages only
     return {
       ...product,
       description: enhanced.description || product.description,
       pros: enhanced.pros?.length > 0 ? enhanced.pros : product.pros,
       cons: enhanced.cons?.length > 0 ? enhanced.cons : product.cons,
-      estimatedPrice: enhanced.estimatedPrice || product.estimatedPrice,
+      // Keep original price - don't use AI-guessed prices
     };
   } catch (error) {
     console.error(`Enhancement parsing failed for ${product.name}:`, error);
