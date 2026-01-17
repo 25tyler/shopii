@@ -114,30 +114,58 @@ const DTC_BRANDS: Record<string, string> = {
   'material': 'https://materialkitchen.com',
 };
 
-// Check if a URL is an actual product page (not a search/category page)
-function isProductPageUrl(url: string): boolean {
+// Check if a URL is NOT a search/category page (inverse logic - more permissive)
+// We reject known bad patterns and accept everything else
+function isNotSearchOrCategoryPage(url: string): boolean {
   const urlLower = url.toLowerCase();
 
-  // Explicitly reject search/category/browse pages
-  if (urlLower.includes('/search') || urlLower.includes('/s?k=') || urlLower.includes('/s?') ||
-      urlLower.includes('/category') || urlLower.includes('/collections') ||
-      urlLower.includes('/blog') || urlLower.includes('/article') ||
-      urlLower.includes('tbm=shop') || urlLower.includes('/gp/browse') ||
-      urlLower.includes('google.com/search')) {
+  // Reject Google search/shopping pages
+  if (urlLower.includes('google.com')) {
     return false;
   }
 
-  // Amazon product pages have /dp/ASIN pattern
+  // Reject Amazon search pages (but allow product pages)
   if (urlLower.includes('amazon.com')) {
-    return /\/dp\/[A-Z0-9]{10}/i.test(url);
+    // Amazon search pages have /s? pattern
+    if (urlLower.includes('/s?') || urlLower.includes('/s/')) {
+      return false;
+    }
+    // Amazon browse pages
+    if (urlLower.includes('/gp/browse') || urlLower.includes('/b?') || urlLower.includes('/b/')) {
+      return false;
+    }
+    // Accept Amazon product pages (/dp/ASIN) and other Amazon pages
+    return true;
   }
 
-  // Common product page patterns
-  return urlLower.includes('/product') || urlLower.includes('/products/') ||
-         urlLower.includes('/p/') || urlLower.includes('/pd/') ||
-         urlLower.includes('/item') || urlLower.includes('/items/') ||
-         /\/[a-z0-9-]+\.html$/i.test(urlLower) || // Many product pages end in .html
-         /\/[a-z0-9]+-[a-z0-9]{5,}$/i.test(urlLower); // slug-id pattern like /product-name-12345
+  // Reject common search/category patterns on other sites
+  const badPatterns = [
+    '/search',
+    '/category/',
+    '/categories/',
+    '/collections/',
+    '/browse/',
+    '/blog/',
+    '/article/',
+    '/news/',
+    '/about',
+    '/contact',
+    '/faq',
+    '/help/',
+    'tbm=shop',
+    '?q=',
+    '?query=',
+    '?search=',
+  ];
+
+  for (const pattern of badPatterns) {
+    if (urlLower.includes(pattern)) {
+      return false;
+    }
+  }
+
+  // Accept everything else - trust Tavily's search results
+  return true;
 }
 
 // Add affiliate tag to Amazon URLs
@@ -236,7 +264,7 @@ export async function lookupProductUrl(
         if (response.results && response.results.length > 0) {
           // Find actual product pages (not search pages)
           for (const result of response.results) {
-            if (isProductPageUrl(result.url)) {
+            if (isNotSearchOrCategoryPage(result.url)) {
               const finalUrl = addAmazonAffiliateTag(result.url);
               const retailer = getRetailerFromUrl(result.url);
               console.log(`[ProductURL] Found product page (${priority}): ${finalUrl}`);
@@ -267,7 +295,7 @@ export async function getPurchaseUrl(
   existingUrl?: string | null
 ): Promise<{ url: string; retailer: string } | null> {
   // If we already have a direct product URL, validate and use it
-  if (existingUrl && isProductPageUrl(existingUrl)) {
+  if (existingUrl && isNotSearchOrCategoryPage(existingUrl)) {
     const finalUrl = addAmazonAffiliateTag(existingUrl);
     const retailer = getRetailerFromUrl(existingUrl);
     console.log(`[ProductURL] Using existing product URL: ${finalUrl}`);

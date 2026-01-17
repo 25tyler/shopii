@@ -269,21 +269,38 @@ export async function devChatRoutes(fastify: FastifyInstance) {
       }
 
       // Look up actual product URLs in parallel
-      // Only include products where we find a real product page URL (not search URLs)
-      const productsWithUrlsRaw = await Promise.all(
+      // We try to find real product pages, but include products even if URL lookup fails
+      const productsWithUrls = await Promise.all(
         extractedProducts.map(async (p) => {
           // Try to get a real product URL
-          const urlInfo = await getPurchaseUrl(
-            p.name,
-            p.brand,
-            p.retailer,
-            p.affiliateUrl // Use existing URL if it's a direct product link
-          );
+          let affiliateUrl = '';
+          let retailer = p.retailer || 'Store';
 
-          // If no product URL found, return null (will be filtered out)
-          if (!urlInfo || !urlInfo.url) {
-            fastify.log.info(`[Chat] No product URL found for ${p.name}, excluding from results`);
-            return null;
+          try {
+            const urlInfo = await getPurchaseUrl(
+              p.name,
+              p.brand,
+              p.retailer,
+              p.affiliateUrl // Use existing URL if it's a direct product link
+            );
+
+            if (urlInfo && urlInfo.url) {
+              affiliateUrl = urlInfo.url;
+              retailer = urlInfo.retailer;
+              fastify.log.info(`[Chat] Found product URL for ${p.name}: ${affiliateUrl}`);
+            } else {
+              // Fallback: Amazon search URL with affiliate tag (better than nothing)
+              const searchTerm = p.brand ? `${p.brand} ${p.name}` : p.name;
+              affiliateUrl = `https://www.amazon.com/s?k=${encodeURIComponent(searchTerm)}&tag=shopii-20`;
+              retailer = 'Amazon';
+              fastify.log.info(`[Chat] Using Amazon search fallback for ${p.name}`);
+            }
+          } catch (error) {
+            // On error, use Amazon search fallback
+            const searchTerm = p.brand ? `${p.brand} ${p.name}` : p.name;
+            affiliateUrl = `https://www.amazon.com/s?k=${encodeURIComponent(searchTerm)}&tag=shopii-20`;
+            retailer = 'Amazon';
+            fastify.log.info(`[Chat] URL lookup failed for ${p.name}, using Amazon search fallback`);
           }
 
           return {
@@ -298,8 +315,8 @@ export async function devChatRoutes(fastify: FastifyInstance) {
             },
             pros: p.pros || [],
             cons: p.cons || [],
-            affiliateUrl: urlInfo.url,
-            retailer: urlInfo.retailer,
+            affiliateUrl,
+            retailer,
             sourcesCount: p.sourcesCount || 1,
             // Two separate ratings
             aiRating: p.qualityScore || 75, // General product quality (cached)
@@ -313,9 +330,7 @@ export async function devChatRoutes(fastify: FastifyInstance) {
         })
       );
 
-      // Filter out products where we couldn't find a real URL
-      const productsWithUrls = productsWithUrlsRaw.filter((p): p is NonNullable<typeof p> => p !== null);
-      fastify.log.info(`[Chat] ${productsWithUrls.length}/${extractedProducts.length} products have valid URLs`);
+      fastify.log.info(`[Chat] Returning ${productsWithUrls.length} products`);
 
       return {
         message: aiResponse,
