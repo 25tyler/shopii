@@ -36,13 +36,46 @@ interface CachedProductDB {
   updatedAt: Date;
 }
 
+// Validate price based on category - returns null if price seems wrong
+function validatePrice(price: string | null, category: string): string | null {
+  if (!price) return null;
+
+  const priceNum = parseFloat(price.replace(/[$,]/g, ''));
+  if (isNaN(priceNum)) return null;
+
+  const categoryLower = category.toLowerCase();
+
+  // Category-based price sanity checks
+  const isFoodOrSnack = categoryLower.includes('snack') || categoryLower.includes('food') ||
+    categoryLower.includes('fruit') || categoryLower.includes('candy') || categoryLower.includes('beverage') ||
+    categoryLower.includes('drink') || categoryLower.includes('grocery') || categoryLower.includes('gumm');
+  const isClothing = categoryLower.includes('shirt') || categoryLower.includes('clothing') ||
+    categoryLower.includes('apparel') || categoryLower.includes('pants') || categoryLower.includes('shoes');
+  const isElectronics = categoryLower.includes('electronic') || categoryLower.includes('headphone') ||
+    categoryLower.includes('computer') || categoryLower.includes('phone') || categoryLower.includes('laptop');
+
+  // Return null if price is unreasonable for category
+  if (isFoodOrSnack && priceNum > 50) {
+    console.log(`[PriceValidation] Rejected $${priceNum} for category "${category}" (food/snack)`);
+    return null;
+  } else if (isClothing && priceNum > 500) {
+    console.log(`[PriceValidation] Rejected $${priceNum} for category "${category}" (clothing)`);
+    return null;
+  } else if (!isElectronics && priceNum > 1000) {
+    console.log(`[PriceValidation] Rejected $${priceNum} for category "${category}" (non-electronics)`);
+    return null;
+  }
+
+  return price;
+}
+
 function dbToExtractedProduct(cached: CachedProductDB, matchScore: number = 75): ExtractedProduct {
   return {
     name: cached.name,
     brand: cached.brand,
     category: cached.category,
     description: cached.description,
-    estimatedPrice: cached.estimatedPrice,
+    estimatedPrice: validatePrice(cached.estimatedPrice, cached.category),
     imageUrl: cached.imageUrl,
     affiliateUrl: cached.affiliateUrl,
     retailer: cached.retailer,
@@ -210,7 +243,7 @@ export async function searchCachedProducts(
     return [];
   }
 
-  // Search by name, brand, category, description
+  // Search by name, brand, category (NOT description - too broad for fallback)
   // SQLite doesn't support full-text search easily, so we use LIKE
   const cached = await prisma.cachedProduct.findMany({
     where: {
@@ -218,33 +251,47 @@ export async function searchCachedProducts(
         { name: { contains: keyword } },
         { brand: { contains: keyword } },
         { category: { contains: keyword } },
-        { description: { contains: keyword } },
       ]),
     },
     orderBy: {
       qualityScore: 'desc',
     },
-    take: limit * 2, // Get more and filter
+    take: limit * 3, // Get more and filter
   });
 
-  // Score results by how many keywords match
+  // Score results - prioritize name/category matches over brand matches
   const scored = cached.map((c) => {
-    const text = `${c.name} ${c.brand} ${c.category} ${c.description}`.toLowerCase();
-    const matchCount = keywords.filter((k) => text.includes(k)).length;
-    return { product: c, matchCount };
+    const nameLower = c.name.toLowerCase();
+    const categoryLower = c.category.toLowerCase();
+    const brandLower = c.brand.toLowerCase();
+
+    let score = 0;
+    for (const keyword of keywords) {
+      // Name matches are most important (product identity)
+      if (nameLower.includes(keyword)) score += 10;
+      // Category matches are very important (product type)
+      if (categoryLower.includes(keyword)) score += 8;
+      // Brand matches are less important for relevance
+      if (brandLower.includes(keyword)) score += 3;
+    }
+
+    return { product: c, score };
   });
 
-  // Sort by match count, then quality
-  scored.sort((a, b) => {
-    if (b.matchCount !== a.matchCount) return b.matchCount - a.matchCount;
+  // Filter out low-relevance matches (need at least one good match)
+  const relevant = scored.filter((s) => s.score >= 8);
+
+  // Sort by score, then quality
+  relevant.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
     return b.product.qualityScore - a.product.qualityScore;
   });
 
-  return scored
+  return relevant
     .slice(0, limit)
     .map((s) => {
-      // Compute match score based on keyword matches
-      const matchScore = Math.min(95, 50 + (s.matchCount / keywords.length) * 45);
+      // Compute match score based on relevance score
+      const matchScore = Math.min(95, 50 + (s.score / (keywords.length * 10)) * 45);
       return dbToExtractedProduct(s.product as CachedProductDB, matchScore);
     });
 }

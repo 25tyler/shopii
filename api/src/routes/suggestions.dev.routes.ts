@@ -90,20 +90,41 @@ export async function devSuggestionsRoutes(fastify: FastifyInstance) {
       const allProducts: any[] = [];
       const seenKeys = new Set<string>();
 
+      // Helper to calculate recency boost (higher = more recent)
+      // Recency is the PRIMARY sorting factor - recent searches should always appear first
+      const getRecencyBoost = (lastSeen: string): number => {
+        const now = Date.now();
+        const lastSeenTime = new Date(lastSeen).getTime();
+        const minutesSince = (now - lastSeenTime) / (1000 * 60);
+
+        // Large differences to ensure recent items always come first
+        if (minutesSince < 5) return 1000;      // Last 5 minutes - highest priority
+        if (minutesSince < 30) return 500;      // Last 30 minutes
+        if (minutesSince < 60) return 200;      // Last hour
+        if (minutesSince < 60 * 24) return 50;  // Last 24 hours
+        return 10;                               // Older than 24 hours
+      };
+
       // 1. Get products from top learned categories (if user has preferences)
+      // Process in order of recency (topCategories is already sorted by recency score)
       if (topCategories.length > 0) {
-        for (const category of topCategories) {
+        for (let i = 0; i < topCategories.length; i++) {
+          const category = topCategories[i];
           const categoryProducts = await getCachedProductsByCategory(category, 5);
           for (const product of categoryProducts) {
             const key = `${product.brand}-${product.name}`.toLowerCase();
             if (!seenKeys.has(key)) {
               seenKeys.add(key);
-              const prefWeight = learnedCategories.find(
+              const pref = learnedCategories.find(
                 (c) => c.category.toLowerCase() === category.toLowerCase()
-              )?.weight || 0;
+              );
+              const prefWeight = pref?.weight || 0;
+              const recencyBoost = pref?.lastSeen ? getRecencyBoost(pref.lastSeen) : 0;
               allProducts.push({
                 ...product,
                 _preferenceBoost: prefWeight,
+                _recencyBoost: recencyBoost,
+                _order: i, // Lower = more recent category
                 _matchReason: `Based on your interest in ${category}`,
               });
             }
@@ -113,18 +134,23 @@ export async function devSuggestionsRoutes(fastify: FastifyInstance) {
 
       // 2. Get products from preferred brands
       if (topBrands.length > 0) {
-        for (const brand of topBrands) {
+        for (let i = 0; i < topBrands.length; i++) {
+          const brand = topBrands[i];
           const brandProducts = await searchCachedProducts(brand, 5);
           for (const product of brandProducts) {
             const key = `${product.brand}-${product.name}`.toLowerCase();
             if (!seenKeys.has(key) && product.brand.toLowerCase() === brand.toLowerCase()) {
               seenKeys.add(key);
-              const prefWeight = learnedBrands.find(
+              const pref = learnedBrands.find(
                 (b) => b.brand.toLowerCase() === brand.toLowerCase()
-              )?.weight || 0;
+              );
+              const prefWeight = pref?.weight || 0;
+              const recencyBoost = pref?.lastSeen ? getRecencyBoost(pref.lastSeen) : 0;
               allProducts.push({
                 ...product,
                 _preferenceBoost: prefWeight,
+                _recencyBoost: recencyBoost,
+                _order: i,
                 _matchReason: `From ${product.brand}, a brand you like`,
               });
             }
@@ -142,17 +168,26 @@ export async function devSuggestionsRoutes(fastify: FastifyInstance) {
             allProducts.push({
               ...product,
               _preferenceBoost: 0,
+              _recencyBoost: 0,
+              _order: 999, // Low priority
               _matchReason: 'Top-rated product',
             });
           }
         }
       }
 
-      // Sort by preference boost + quality score
+      // Sort by: recency boost (most important) > preference boost > quality score
       allProducts.sort((a, b) => {
-        const scoreA = (a.qualityScore || 0) + (a._preferenceBoost || 0) * 0.5;
-        const scoreB = (b.qualityScore || 0) + (b._preferenceBoost || 0) * 0.5;
-        return scoreB - scoreA;
+        // First, prioritize by recency boost (recent searches first)
+        const recencyDiff = (b._recencyBoost || 0) - (a._recencyBoost || 0);
+        if (recencyDiff !== 0) return recencyDiff;
+
+        // Then by preference weight
+        const prefDiff = (b._preferenceBoost || 0) - (a._preferenceBoost || 0);
+        if (prefDiff !== 0) return prefDiff;
+
+        // Finally by quality score
+        return (b.qualityScore || 0) - (a.qualityScore || 0);
       });
 
       // Paginate

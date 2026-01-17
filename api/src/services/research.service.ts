@@ -192,41 +192,37 @@ export async function conductProductResearch(userQuery: string): Promise<{
     context += `${source.content.slice(0, 3000)}\n\n`; // Increased to 3000 for richer context
   }
 
-  context += `\n=== CRITICAL ANALYSIS INSTRUCTIONS ===
+  context += `\n=== PRODUCT EXTRACTION INSTRUCTIONS ===
 
-You are identifying the ABSOLUTE BEST products based on this research. Apply these strict criteria:
+You are extracting ALL products mentioned in this research. The user is shopping and MUST see product recommendations.
 
-VALIDATION REQUIREMENTS:
-1. Only recommend products that have STRONG ENDORSEMENT signals in the research:
-   - Multiple sources mentioning it positively
-   - Phrases like "best", "highly recommend", "gold standard", "can't go wrong"
-   - Enthusiast communities specifically calling it out as top-tier
+CRITICAL: ALWAYS extract 3-5 products. Never return empty results.
 
-2. EVIDENCE SCORING (products must have at least 2 of these):
-   - Mentioned by 2+ independent sources
-   - Called "the best" or similar superlative
-   - Recommended by expert reviewers (Wirecutter, RTINGS, etc.)
-   - Has enthusiast community consensus
+EXTRACTION RULES:
+1. Include ANY product that is mentioned positively or neutrally in the research
+2. Even products mentioned just once are valid - mark them with endorsementStrength: "weak"
+3. Products with multiple mentions or strong praise get endorsementStrength: "strong" or "moderate"
 
-3. REJECTION CRITERIA - Do NOT include products that:
-   - Are only mentioned once without strong endorsement
-   - Are just "mentioned" but not recommended
-   - Are described with qualifiers like "okay", "decent", "budget option" (unless user asked for budget)
-   - Have significant criticisms without being defended
+ENDORSEMENT LEVELS:
+- "strong": Multiple sources, superlatives like "best", "gold standard", "highly recommend"
+- "moderate": A few mentions, generally positive sentiment
+- "weak": Single mention or brief positive reference - STILL INCLUDE THESE
 
-4. QUALITY OVER QUANTITY:
-   - Return 3-5 STRONGLY VALIDATED products rather than 5 weakly mentioned ones
-   - It's better to return fewer high-confidence picks than pad the list
+DO NOT REJECT products just because:
+- They're only mentioned once (include with weak endorsement)
+- They have "budget" or "decent" descriptions (some users want budget options)
+- They have some criticisms (list those as cons)
 
-5. For each product, you MUST cite:
-   - How many sources mentioned it
-   - What SPECIFIC phrases of endorsement were used
-   - What the consensus pros/cons are across sources
+FOR EACH PRODUCT:
+- Extract brand and full product name
+- Note how many sources mentioned it
+- Quote actual phrases from the research
+- List pros and cons mentioned
 
-PRIORITIZATION:
-- Products with enthusiast community consensus > Expert picks alone > Single mentions
-- Niche quality brands over mainstream if the research supports it
-- Specific model recommendations over generic brand mentions`;
+PRIORITIZATION (for sorting, not rejection):
+- Products with strong endorsements first
+- Niche quality brands over mainstream if research supports it
+- But ALWAYS include at least 3-5 products total`;
 
   return {
     sources: recommendations.rawSources,

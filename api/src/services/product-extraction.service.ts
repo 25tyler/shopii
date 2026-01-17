@@ -1,17 +1,26 @@
 // Product extraction service - extracts product info from research and generates affiliate links
 import OpenAI from 'openai';
+import { tavily } from '@tavily/core';
 
 // Google Custom Search API config
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 const GOOGLE_CX = process.env.GOOGLE_CX; // Custom Search Engine ID
 
 let _openai: OpenAI | null = null;
+let _tavily: ReturnType<typeof tavily> | null = null;
 
 function getOpenAI(): OpenAI {
   if (!_openai) {
     _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   }
   return _openai;
+}
+
+function getTavily() {
+  if (!_tavily) {
+    _tavily = tavily({ apiKey: process.env.TAVILY_API_KEY! });
+  }
+  return _tavily;
 }
 
 export interface ExtractedProduct {
@@ -105,54 +114,212 @@ const DTC_BRANDS: Record<string, string> = {
   'material': 'https://materialkitchen.com',
 };
 
-// Generate the best purchase URL for a product
+// Check if a URL is NOT a search/category page (inverse logic - more permissive)
+// We reject known bad patterns and accept everything else
+function isNotSearchOrCategoryPage(url: string): boolean {
+  const urlLower = url.toLowerCase();
+
+  // Reject Google search/shopping pages
+  if (urlLower.includes('google.com')) {
+    return false;
+  }
+
+  // Reject Amazon search pages (but allow product pages)
+  if (urlLower.includes('amazon.com')) {
+    // Amazon search pages have /s? pattern
+    if (urlLower.includes('/s?') || urlLower.includes('/s/')) {
+      return false;
+    }
+    // Amazon browse pages
+    if (urlLower.includes('/gp/browse') || urlLower.includes('/b?') || urlLower.includes('/b/')) {
+      return false;
+    }
+    // Accept Amazon product pages (/dp/ASIN) and other Amazon pages
+    return true;
+  }
+
+  // Reject common search/category patterns on other sites
+  const badPatterns = [
+    '/search',
+    '/category/',
+    '/categories/',
+    '/collections/',
+    '/browse/',
+    '/blog/',
+    '/article/',
+    '/news/',
+    '/about',
+    '/contact',
+    '/faq',
+    '/help/',
+    'tbm=shop',
+    '?q=',
+    '?query=',
+    '?search=',
+  ];
+
+  for (const pattern of badPatterns) {
+    if (urlLower.includes(pattern)) {
+      return false;
+    }
+  }
+
+  // Accept everything else - trust Tavily's search results
+  return true;
+}
+
+// Add affiliate tag to Amazon URLs
+function addAmazonAffiliateTag(url: string): string {
+  if (!url.includes('amazon.com')) return url;
+  try {
+    const urlObj = new URL(url);
+    urlObj.searchParams.set('tag', AMAZON_AFFILIATE_TAG);
+    return urlObj.toString();
+  } catch {
+    return url;
+  }
+}
+
+// Extract retailer display name from URL
+function getRetailerFromUrl(url: string): string {
+  try {
+    const domain = new URL(url).hostname.replace('www.', '');
+    const retailerName = domain.split('.')[0] || 'Store';
+    return retailerName.charAt(0).toUpperCase() + retailerName.slice(1);
+  } catch {
+    return 'Store';
+  }
+}
+
+// Look up actual product URL using Tavily search
+// Priority: 1) Brand official store, 2) Recommended retailer, 3) Any product page
+// NEVER returns search URLs - only actual product pages
+export async function lookupProductUrl(
+  productName: string,
+  brand: string,
+  preferredRetailer?: string
+): Promise<{ url: string; retailer: string } | null> {
+  try {
+    const client = getTavily();
+
+    // Clean up the search term - avoid duplicating brand if already in name
+    const nameLower = productName.toLowerCase();
+    const brandLower = brand.toLowerCase();
+    const searchTerm = (brand && !nameLower.includes(brandLower))
+      ? `${brand} ${productName}`
+      : productName;
+
+    // Build search queries in priority order
+    // Priority: Brand official > Recommended retailer > General product page search
+    const searchQueries: Array<{ query: string; includeDomains?: string[]; priority: string }> = [];
+
+    // Priority 1: Brand official store (best for the brand, often best prices)
+    const dtcUrl = DTC_BRANDS[brandLower];
+    if (dtcUrl) {
+      const dtcDomain = new URL(dtcUrl).hostname.replace('www.', '');
+      searchQueries.push({
+        query: `${searchTerm} site:${dtcDomain}`,
+        includeDomains: [dtcDomain],
+        priority: 'brand_official',
+      });
+    }
+
+    // Priority 2: Recommended retailer (if specified and not "brand")
+    if (preferredRetailer) {
+      const retailerLower = preferredRetailer.toLowerCase();
+      if (!retailerLower.includes('brand') && !retailerLower.includes('official') && !retailerLower.includes('direct')) {
+        if (retailerLower.includes('amazon')) {
+          searchQueries.push({
+            query: `${searchTerm} site:amazon.com`,
+            includeDomains: ['amazon.com'],
+            priority: 'amazon',
+          });
+        } else {
+          searchQueries.push({
+            query: `${searchTerm} buy ${preferredRetailer}`,
+            priority: 'preferred_retailer',
+          });
+        }
+      }
+    }
+
+    // Priority 3: General product page search (find wherever it's sold)
+    searchQueries.push({
+      query: `buy ${searchTerm} product`,
+      priority: 'general',
+    });
+
+    // Try each search query until we find a product page
+    for (const { query, includeDomains, priority } of searchQueries) {
+      try {
+        console.log(`[ProductURL] Trying ${priority} search: "${query}"`);
+
+        const response = await client.search(query, {
+          searchDepth: 'basic',
+          maxResults: 8,
+          includeAnswer: false,
+          ...(includeDomains && { includeDomains }),
+        });
+
+        if (response.results && response.results.length > 0) {
+          // Find actual product pages (not search pages)
+          for (const result of response.results) {
+            if (isNotSearchOrCategoryPage(result.url)) {
+              const finalUrl = addAmazonAffiliateTag(result.url);
+              const retailer = getRetailerFromUrl(result.url);
+              console.log(`[ProductURL] Found product page (${priority}): ${finalUrl}`);
+              return { url: finalUrl, retailer };
+            }
+          }
+        }
+      } catch (searchError) {
+        console.error(`[ProductURL] Search failed for "${query}":`, searchError);
+        // Continue to next search query
+      }
+    }
+
+    console.log(`[ProductURL] No product page found for ${searchTerm}`);
+    return null;
+  } catch (error) {
+    console.error('Product URL lookup failed:', error);
+    return null;
+  }
+}
+
+// Main function to get purchase URL - tries lookup first
+// Returns null if no actual product page can be found (never returns search URLs)
+export async function getPurchaseUrl(
+  productName: string,
+  brand: string,
+  recommendedRetailer?: string,
+  existingUrl?: string | null
+): Promise<{ url: string; retailer: string } | null> {
+  // If we already have a direct product URL, validate and use it
+  if (existingUrl && isNotSearchOrCategoryPage(existingUrl)) {
+    const finalUrl = addAmazonAffiliateTag(existingUrl);
+    const retailer = getRetailerFromUrl(existingUrl);
+    console.log(`[ProductURL] Using existing product URL: ${finalUrl}`);
+    return { url: finalUrl, retailer };
+  }
+
+  // Try to look up actual product URL
+  const lookedUpUrl = await lookupProductUrl(productName, brand, recommendedRetailer);
+  return lookedUpUrl; // Returns null if not found - NO fallback to search URLs
+}
+
+// Sync version - returns placeholder URL that will be replaced by async lookup
+// Used during initial extraction, real URLs are fetched in chat route
 export function generatePurchaseUrl(
   productName: string,
   brand: string,
   recommendedRetailer?: string
 ): { url: string; retailer: string } {
-  const brandLower = brand.toLowerCase();
-  const fullProductName = brand ? `${brand} ${productName}` : productName;
-
-  // Check if this is a known DTC brand
-  if (DTC_BRANDS[brandLower]) {
-    const brandUrl = DTC_BRANDS[brandLower];
-    // Try to create a search URL for the brand's site
-    const searchQuery = encodeURIComponent(productName);
-    return {
-      url: `${brandUrl}/search?q=${searchQuery}`,
-      retailer: brand,
-    };
-  }
-
-  // Check if AI recommended a specific retailer
-  if (recommendedRetailer) {
-    const retailerLower = recommendedRetailer.toLowerCase();
-
-    // Direct brand website recommendation
-    if (retailerLower.includes('brand') || retailerLower.includes('direct') || retailerLower.includes('official')) {
-      // Try to find brand website via search
-      return {
-        url: `https://www.google.com/search?q=${encodeURIComponent(fullProductName + ' official site buy')}`,
-        retailer: `${brand} (Official)`,
-      };
-    }
-  }
-
-  // Default to Amazon with affiliate tag
-  const searchQuery = encodeURIComponent(fullProductName);
-  let url = `https://www.amazon.com/s?k=${searchQuery}&tag=${AMAZON_AFFILIATE_TAG}`;
-
+  // Return a placeholder - the real URL will be looked up asynchronously
+  // This is just for the initial extraction phase
   return {
-    url,
-    retailer: 'Amazon',
+    url: '', // Empty - will be filled by getPurchaseUrl
+    retailer: recommendedRetailer || 'Store',
   };
-}
-
-// Legacy function for backwards compatibility
-export function generateAmazonAffiliateUrl(productName: string): string {
-  const searchQuery = encodeURIComponent(productName);
-  return `https://www.amazon.com/s?k=${searchQuery}&tag=${AMAZON_AFFILIATE_TAG}`;
 }
 
 // Generate direct Amazon product affiliate URL (if we have ASIN)
@@ -165,54 +332,72 @@ export async function extractProductsFromResearch(
   userQuery: string,
   researchContext: string
 ): Promise<ExtractedProduct[]> {
-  const prompt = `Analyze this research data and extract ALL products that are mentioned positively.
+  const prompt = `Analyze this research data and extract ALL products that are mentioned. Your job is to ALWAYS find products - the user is shopping and needs product recommendations.
 
 USER QUERY (for context only): "${userQuery}"
 
 RESEARCH DATA:
 ${researchContext}
 
-Extract up to 7 products that are mentioned in the research. For each product, provide DETAILED and SPECIFIC information that is QUERY-AGNOSTIC (descriptions should work regardless of how someone found this product):
+CRITICAL: You MUST extract at least 3-5 products. The user is shopping and expects product recommendations. Even if products are only briefly mentioned or have weak endorsements, include them. It's better to show products with caveats than to show nothing.
+
+Extract up to 7 products. For each product, provide DETAILED and SPECIFIC information that is QUERY-AGNOSTIC (descriptions should work regardless of how someone found this product):
 
 1. name: Full product name. Format depends on category:
    - Electronics: Include model numbers (e.g., "Sony WH-1000XM5", "Sennheiser HD 600")
    - Fashion/Clothing: Use brand + product line (e.g., "American Giant Premium Heavyweight Tee", "Uniqlo Supima Cotton T-Shirt")
+   - Food/Beverages: Brand + specific product (e.g., "GT's Kombucha Original", "Suja Organic Green Juice")
    - General products: Be as specific as the research allows (e.g., "Lodge 10.25-inch Cast Iron Skillet")
 2. brand: Brand name
-3. category: Product category (e.g., "T-Shirts", "Wireless Headphones", "Cast Iron Cookware")
-4. estimatedPrice: Price if mentioned, or best estimate (e.g., "$299", "$50-75")
+3. category: Product category (e.g., "T-Shirts", "Wireless Headphones", "Cast Iron Cookware", "Healthy Beverages")
+4. estimatedPrice: Price ONLY if explicitly mentioned in the research. If not mentioned, return null.
+   IMPORTANT: Do NOT guess prices. Only use prices you see in the research data.
+   Typical price ranges for reference (DO NOT use these as defaults - only verify if a price seems wrong):
+   - Snacks/candy/fruit snacks: $3-15
+   - Beverages/drinks: $2-10
+   - Basic clothing items: $15-60
+   - Premium clothing: $50-200
+   - Electronics accessories: $20-150
+   - Major electronics: $100-2000
+   - Furniture: $100-2000
 5. bestRetailer: Where to buy - "brand_direct", "amazon", or specific retailer name
-6. description: 2-3 sentence GENERAL description of what this product is and who it's for. DO NOT reference the user's specific query - write as if for a product database entry.
+6. productUrl: CRITICAL - If a direct link to the product page is in the research data, extract it here. Look for URLs containing the product name or linking to product pages on retailer sites. Return null if no direct product URL is found.
+7. description: 2-3 sentence GENERAL description of what this product is and who it's for. DO NOT reference the user's specific query - write as if for a product database entry.
    - Good: "A heavyweight 100% cotton t-shirt known for durability and American manufacturing. Popular among those seeking quality basics that last for years."
    - Bad: "Perfect for users looking for 100% cotton options" (too query-specific)
-7. pros: Array of GENERAL product strengths (not query-specific). Include 1-6 based on research.
+8. pros: Array of GENERAL product strengths (not query-specific). Include 1-6 based on research.
    - Be specific: "515 GSM heavyweight cotton", "40-hour battery life", "Made in USA"
    - These should be true regardless of why someone is searching
-8. cons: Array of GENERAL product weaknesses. Include 0-4 based on research.
+   - If research is sparse, provide general known strengths of the product
+9. cons: Array of GENERAL product weaknesses. Include 0-4 based on research.
    - Be specific: "Runs short in length", "No wireless charging", "$50+ price point"
    - OK to have 0 if none mentioned
-9. sourcesCount: How many independent sources mentioned this positively
-10. endorsementStrength: "strong", "moderate", or "weak"
-11. endorsementQuotes: 2-4 actual phrases from research (e.g., "best in class", "gold standard")
-12. sourceTypes: Array of source types (e.g., ["reddit", "wirecutter", "enthusiast_forum"])
-13. qualityScore: 0-100 GENERAL PRODUCT QUALITY rating based on:
+10. sourcesCount: How many independent sources mentioned this (even 1 is valid)
+11. endorsementStrength: "strong", "moderate", or "weak" - use "weak" for products barely mentioned, but STILL INCLUDE THEM
+12. endorsementQuotes: 1-4 actual phrases from research (e.g., "best in class", "gold standard"). Can be just 1 short quote.
+13. sourceTypes: Array of source types (e.g., ["reddit", "wirecutter", "enthusiast_forum"])
+14. qualityScore: 0-100 GENERAL PRODUCT QUALITY rating based on:
     - Build quality and materials
     - Durability and longevity
     - Value for price
     - Overall user satisfaction across all use cases
     This is NOT about query relevance - it's about how good the product is overall.
-14. matchScore: 0-100 rating of how well this product matches the USER QUERY specifically.
+    For weakly endorsed products, use 60-70 range.
+15. matchScore: 0-100 rating of how well this product matches the USER QUERY specifically.
     - 90-100: Directly answers what user asked for
     - 70-89: Good match with minor misalignment
     - 50-69: Partial match, might work for user
     - Below 50: Tangentially related
 
 CRITICAL RULES:
+- ALWAYS extract products. Never return an empty array. Find products even if endorsements are weak.
 - description, pros, and cons must be QUERY-AGNOSTIC - they should make sense for ANY search that surfaces this product
 - qualityScore = general product quality (cacheable, consistent)
 - matchScore = relevance to THIS specific query (computed per-search)
-- Only include info ACTUALLY in the research - don't hallucinate
+- Only include info ACTUALLY in the research - don't hallucinate product details
 - For fashion: Brand + product line IS a valid product name
+- If a product is mentioned but has little info, still include it with endorsementStrength: "weak"
+- For estimatedPrice: ONLY use prices from the research data. Return null if no price is mentioned.
 
 Return a JSON array sorted by matchScore (highest first). Return ONLY valid JSON, no markdown.`;
 
@@ -224,9 +409,11 @@ Return a JSON array sorted by matchScore (highest first). Return ONLY valid JSON
       messages: [
         {
           role: 'system',
-          content: `You are an expert product analyst building a product database. Extract product info that is QUERY-AGNOSTIC.
+          content: `You are an expert product analyst for a shopping assistant. Your PRIMARY job is to ALWAYS find products to recommend.
 
-CRITICAL: Write descriptions, pros, and cons as if for a general product database - NOT tailored to any specific search query. The same product info should make sense whether someone searched "best cotton shirts", "durable t-shirts", or "American made clothing".
+CRITICAL RULE: NEVER return an empty array. The user is shopping and MUST see product recommendations. Even if products have weak endorsements or limited info, include them. Show 3-5 products minimum.
+
+Write descriptions, pros, and cons as if for a general product database - NOT tailored to any specific search query. The same product info should make sense whether someone searched "best cotton shirts", "durable t-shirts", or "American made clothing".
 
 TWO SEPARATE RATINGS:
 1. qualityScore (0-100): How good is this product OVERALL? Based on build quality, materials, durability, value. This never changes.
@@ -235,7 +422,10 @@ TWO SEPARATE RATINGS:
 PRODUCT NAMING:
 - Electronics: Model numbers (Sony WH-1000XM5)
 - Fashion: Brand + product line (American Giant Heavyweight Tee)
+- Food/Beverages: Brand + specific product (GT's Kombucha Original)
 - Home goods: Brand + specific product (Lodge Cast Iron Skillet)
+
+PRICING RULE: Only include estimatedPrice if the price is explicitly stated in the research data. Return null if no price is mentioned. NEVER guess prices.
 
 Return only valid JSON arrays. No markdown.`,
         },
@@ -244,7 +434,13 @@ Return only valid JSON arrays. No markdown.`,
     });
 
     const content = response.choices[0]?.message?.content;
-    if (!content) return [];
+    if (!content) {
+      console.log('[ProductExtraction] No content in AI response');
+      return [];
+    }
+
+    console.log('[ProductExtraction] Raw AI response length:', content.length);
+    console.log('[ProductExtraction] Raw AI response preview:', content.slice(0, 500));
 
     // Parse JSON response - handle potential markdown wrapping
     let jsonContent = content.trim();
@@ -252,7 +448,19 @@ Return only valid JSON arrays. No markdown.`,
       jsonContent = jsonContent.replace(/```json?\n?/g, '').replace(/```$/g, '').trim();
     }
 
-    const products = JSON.parse(jsonContent);
+    let products;
+    try {
+      products = JSON.parse(jsonContent);
+    } catch (parseError) {
+      console.error('[ProductExtraction] JSON parse error:', parseError);
+      console.error('[ProductExtraction] Content was:', jsonContent.slice(0, 1000));
+      return [];
+    }
+
+    if (!Array.isArray(products)) {
+      console.log('[ProductExtraction] Response was not an array, got:', typeof products);
+      return [];
+    }
 
     // Log what we got before filtering
     console.log(
@@ -303,11 +511,39 @@ Return only valid JSON arrays. No markdown.`,
           p.bestRetailer
         );
 
+        // Validate price - null out obviously wrong prices based on category
+        let validatedPrice = p.estimatedPrice || null;
+        if (validatedPrice) {
+          const priceNum = parseFloat(validatedPrice.replace(/[$,]/g, ''));
+          const category = (p.category || '').toLowerCase();
+
+          // Category-based price sanity checks
+          const isFoodOrSnack = category.includes('snack') || category.includes('food') ||
+            category.includes('fruit') || category.includes('candy') || category.includes('beverage') ||
+            category.includes('drink') || category.includes('grocery');
+          const isClothing = category.includes('shirt') || category.includes('clothing') ||
+            category.includes('apparel') || category.includes('pants') || category.includes('shoes');
+          const isElectronics = category.includes('electronic') || category.includes('headphone') ||
+            category.includes('computer') || category.includes('phone') || category.includes('laptop');
+
+          // Set null if price is unreasonable for category
+          if (isFoodOrSnack && priceNum > 50) {
+            console.log(`[PriceValidation] Rejected $${priceNum} for ${p.name} (food/snack category)`);
+            validatedPrice = null;
+          } else if (isClothing && priceNum > 500) {
+            console.log(`[PriceValidation] Rejected $${priceNum} for ${p.name} (clothing category)`);
+            validatedPrice = null;
+          } else if (!isElectronics && priceNum > 1000) {
+            console.log(`[PriceValidation] Rejected $${priceNum} for ${p.name} (too high for non-electronics)`);
+            validatedPrice = null;
+          }
+        }
+
         return {
           name: p.name || 'Unknown Product',
           brand: p.brand || '',
           category: p.category || '',
-          estimatedPrice: p.estimatedPrice || null,
+          estimatedPrice: validatedPrice,
           description,
           pros,
           cons,

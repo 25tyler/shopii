@@ -5,14 +5,15 @@ import { prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.dev.js';
 import { generateChatResponse, generateResearchBasedResponse, detectIntent } from '../services/ai.openai.js';
 import { conductProductResearch, enrichProducts } from '../services/research.service.js';
-import { extractProductsFromResearch, fetchProductImages, enhanceProductsWithEnrichment, ExtractedProduct } from '../services/product-extraction.service.js';
+import { extractProductsFromResearch, fetchProductImages, enhanceProductsWithEnrichment, ExtractedProduct, getPurchaseUrl } from '../services/product-extraction.service.js';
 import { cacheProducts, searchCachedProducts } from '../services/product-cache.service.js';
 import { learnFromSearch } from '../services/preference-learning.service.js';
 import { formatArray, parseArray, formatJson, parseJson } from '../utils/db-helpers.js';
 
 // Parse price string that might be a range like "$150-200" or single like "$149.99"
-function parsePrice(priceStr: string | null | undefined): number {
-  if (!priceStr) return 0;
+// Returns null if no valid price found (so frontend can show "Price varies")
+function parsePrice(priceStr: string | null | undefined): number | null {
+  if (!priceStr) return null;
 
   // Remove currency symbols and whitespace
   const cleaned = priceStr.replace(/[$€£¥,\s]/g, '');
@@ -27,7 +28,7 @@ function parsePrice(priceStr: string | null | undefined): number {
 
   // Single price
   const price = parseFloat(cleaned);
-  return isNaN(price) ? 0 : price;
+  return isNaN(price) ? null : price;
 }
 
 const ChatMessageRequestSchema = z.object({
@@ -144,8 +145,25 @@ export async function devChatRoutes(fastify: FastifyInstance) {
           fastify.log.info(`Found ${research.sources.length} research sources`);
 
           // Extract products from research (with affiliate links)
+          fastify.log.info(`Research context length: ${research.context.length} chars`);
+          fastify.log.info(`Research context preview: ${research.context.slice(0, 500)}...`);
           extractedProducts = await extractProductsFromResearch(message, research.context);
           fastify.log.info(`Extracted ${extractedProducts.length} products`);
+
+          // FALLBACK: If extraction yielded no products, use cached products ONLY if they're highly relevant
+          // (matchScore >= 70 means good category/name match, not just description match)
+          if (extractedProducts.length === 0 && cachedMatches.length > 0) {
+            const relevantCacheMatches = cachedMatches.filter((p) => p.matchScore >= 70);
+            if (relevantCacheMatches.length > 0) {
+              fastify.log.info(`No products extracted from research, using ${relevantCacheMatches.length} relevant cached products as fallback`);
+              extractedProducts = relevantCacheMatches;
+            } else {
+              fastify.log.info(`Cache had ${cachedMatches.length} products but none were highly relevant (matchScore >= 70)`);
+            }
+          }
+
+          // Don't do broader keyword search - it returns too many false positives
+          // If we don't have relevant products, it's better to show none than wrong ones
 
           // Run enrichment and image fetching in parallel for speed
           // Enrichment searches for product-specific details to fill in gaps
@@ -251,32 +269,73 @@ export async function devChatRoutes(fastify: FastifyInstance) {
         });
       }
 
+      // Look up actual product URLs in parallel
+      // We try to find real product pages, but include products even if URL lookup fails
+      const productsWithUrls = await Promise.all(
+        extractedProducts.map(async (p) => {
+          // Try to get a real product URL
+          let affiliateUrl = '';
+          let retailer = p.retailer || 'Store';
+
+          try {
+            const urlInfo = await getPurchaseUrl(
+              p.name,
+              p.brand,
+              p.retailer,
+              p.affiliateUrl // Use existing URL if it's a direct product link
+            );
+
+            if (urlInfo && urlInfo.url) {
+              affiliateUrl = urlInfo.url;
+              retailer = urlInfo.retailer;
+              fastify.log.info(`[Chat] Found product URL for ${p.name}: ${affiliateUrl}`);
+            } else {
+              // Fallback: Amazon search URL with affiliate tag (better than nothing)
+              const searchTerm = p.brand ? `${p.brand} ${p.name}` : p.name;
+              affiliateUrl = `https://www.amazon.com/s?k=${encodeURIComponent(searchTerm)}&tag=shopii-20`;
+              retailer = 'Amazon';
+              fastify.log.info(`[Chat] Using Amazon search fallback for ${p.name}`);
+            }
+          } catch (error) {
+            // On error, use Amazon search fallback
+            const searchTerm = p.brand ? `${p.brand} ${p.name}` : p.name;
+            affiliateUrl = `https://www.amazon.com/s?k=${encodeURIComponent(searchTerm)}&tag=shopii-20`;
+            retailer = 'Amazon';
+            fastify.log.info(`[Chat] URL lookup failed for ${p.name}, using Amazon search fallback`);
+          }
+
+          return {
+            id: `${p.brand}-${p.name}`.toLowerCase().replace(/\s+/g, '-'),
+            name: p.name,
+            brand: p.brand,
+            description: p.description || '',
+            imageUrl: p.imageUrl || '',
+            price: {
+              amount: parsePrice(p.estimatedPrice),
+              currency: 'USD',
+            },
+            pros: p.pros || [],
+            cons: p.cons || [],
+            affiliateUrl,
+            retailer,
+            sourcesCount: p.sourcesCount || 1,
+            // Two separate ratings
+            aiRating: p.qualityScore || 75, // General product quality (cached)
+            confidence: (p.matchScore || 75) / 100, // Query match/relevance (per-search)
+            matchScore: p.matchScore || 75, // Explicit match score for sorting
+            endorsementStrength: p.endorsementStrength || 'moderate',
+            endorsementQuotes: p.endorsementQuotes || [],
+            sourceTypes: p.sourceTypes || [],
+            isSponsored: false,
+          };
+        })
+      );
+
+      fastify.log.info(`[Chat] Returning ${productsWithUrls.length} products`);
+
       return {
         message: aiResponse,
-        products: extractedProducts.map((p) => ({
-          id: `${p.brand}-${p.name}`.toLowerCase().replace(/\s+/g, '-'),
-          name: p.name,
-          brand: p.brand,
-          description: p.description || '',
-          imageUrl: p.imageUrl || '',
-          price: {
-            amount: parsePrice(p.estimatedPrice),
-            currency: 'USD',
-          },
-          pros: p.pros || [],
-          cons: p.cons || [],
-          affiliateUrl: p.affiliateUrl || '',
-          retailer: p.retailer || 'Amazon',
-          sourcesCount: p.sourcesCount || 1,
-          // Two separate ratings
-          aiRating: p.qualityScore || 75, // General product quality (cached)
-          confidence: (p.matchScore || 75) / 100, // Query match/relevance (per-search)
-          matchScore: p.matchScore || 75, // Explicit match score for sorting
-          endorsementStrength: p.endorsementStrength || 'moderate',
-          endorsementQuotes: p.endorsementQuotes || [],
-          sourceTypes: p.sourceTypes || [],
-          isSponsored: false,
-        })),
+        products: productsWithUrls,
         sources: researchSources.slice(0, 5),
         conversationId: conversation.id,
         _devMode: true,
