@@ -9,6 +9,26 @@ import { extractProductsFromResearch, fetchProductImages, enhanceProductsWithEnr
 import { cacheProducts, searchCachedProducts } from '../services/product-cache.service.js';
 import { learnFromSearch } from '../services/preference-learning.service.js';
 
+// Parse price string that might be a range like "$150-200" or single like "$149.99"
+function parsePrice(priceStr: string | null | undefined): number {
+  if (!priceStr) return 0;
+
+  // Remove currency symbols and whitespace
+  const cleaned = priceStr.replace(/[$€£¥,\s]/g, '');
+
+  // Check if it's a range (contains - but not negative)
+  if (cleaned.includes('-') && !cleaned.startsWith('-')) {
+    const parts = cleaned.split('-');
+    // Take the first (lower) price in the range
+    const firstPrice = parseFloat(parts[0]);
+    return isNaN(firstPrice) ? 0 : firstPrice;
+  }
+
+  // Single price
+  const price = parseFloat(cleaned);
+  return isNaN(price) ? 0 : price;
+}
+
 const ChatMessageRequestSchema = z.object({
   message: z.string().min(1).max(2000),
   conversationId: z.string().optional(),
@@ -238,12 +258,10 @@ export async function devChatRoutes(fastify: FastifyInstance) {
           brand: p.brand,
           description: p.description || '',
           imageUrl: p.imageUrl || '',
-          price: p.estimatedPrice
-            ? {
-                amount: parseFloat(String(p.estimatedPrice).replace(/[^0-9.]/g, '')) || 0,
-                currency: 'USD',
-              }
-            : { amount: 0, currency: 'USD' },
+          price: {
+            amount: parsePrice(p.estimatedPrice),
+            currency: 'USD',
+          },
           pros: p.pros || [],
           cons: p.cons || [],
           affiliateUrl: p.affiliateUrl || '',

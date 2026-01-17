@@ -79,9 +79,14 @@ export default function App() {
         </button>
       </nav>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-hidden">
-        {activeTab === 'chat' ? <ChatContainer /> : <SuggestionsPage />}
+      {/* Main Content - Both components stay mounted to preserve state */}
+      <main className="flex-1 overflow-hidden relative">
+        <div className={`absolute inset-0 ${activeTab === 'chat' ? 'visible' : 'invisible'}`}>
+          <ChatContainer />
+        </div>
+        <div className={`absolute inset-0 ${activeTab === 'suggestions' ? 'visible' : 'invisible'}`}>
+          <SuggestionsPage />
+        </div>
       </main>
     </div>
   );
