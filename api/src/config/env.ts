@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import dotenv from 'dotenv';
+
+// Load .env file before validating
+dotenv.config({ override: true });
 
 const envSchema = z.object({
   // Server
@@ -17,13 +21,16 @@ const envSchema = z.object({
   SUPABASE_ANON_KEY: z.string(),
   SUPABASE_SERVICE_ROLE_KEY: z.string(),
 
-  // Anthropic (Claude)
-  ANTHROPIC_API_KEY: z.string(),
+  // OpenAI (GPT-4)
+  OPENAI_API_KEY: z.string().optional(),
 
-  // Stripe
-  STRIPE_SECRET_KEY: z.string(),
-  STRIPE_WEBHOOK_SECRET: z.string(),
-  STRIPE_PRO_PRICE_ID: z.string(),
+  // Anthropic (Claude)
+  ANTHROPIC_API_KEY: z.string().optional(),
+
+  // Stripe (optional - not needed for hackathon)
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PRO_PRICE_ID: z.string().optional(),
 
   // Affiliate
   AMAZON_AFFILIATE_TAG: z.string().default('shopii-20'),
@@ -41,10 +48,6 @@ function loadEnv(): Env {
     console.error('Invalid environment variables:');
     console.error(result.error.flatten().fieldErrors);
 
-    // In development, provide helpful defaults message
-    if (process.env.NODE_ENV !== 'production') {
-      console.error('\nCreate a .env file with the required variables.');
-    }
 
     process.exit(1);
   }

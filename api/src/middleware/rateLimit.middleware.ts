@@ -1,12 +1,12 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { checkRateLimit, redis } from '../config/redis.js';
+import { checkRateLimit } from '../config/redis.js';
 import { prisma } from '../config/prisma.js';
 
-// Rate limits by plan
+// Rate limits by plan - for hackathon: only limit guests, registered users get unlimited
 const RATE_LIMITS = {
-  guest: { searches: 5, windowSeconds: 86400 }, // 5 per day
-  free: { searches: 20, windowSeconds: 86400 }, // 20 per day
-  pro: { searches: Infinity, windowSeconds: 86400 }, // Unlimited
+  guest: { searches: 20, windowSeconds: 86400 }, // 20 per day for guests
+  free: { searches: Infinity, windowSeconds: 86400 }, // Unlimited for registered users
+  pro: { searches: Infinity, windowSeconds: 86400 }, // Unlimited (kept for compatibility)
 };
 
 export async function searchRateLimitMiddleware(request: FastifyRequest, reply: FastifyReply) {
@@ -17,7 +17,7 @@ export async function searchRateLimitMiddleware(request: FastifyRequest, reply: 
   const plan = user?.plan || 'guest';
   const limits = RATE_LIMITS[plan as keyof typeof RATE_LIMITS] || RATE_LIMITS.guest;
 
-  // Pro users have no limit
+  // Free and Pro users have no limit (hackathon: only limit guests)
   if (limits.searches === Infinity) {
     return;
   }
@@ -33,16 +33,9 @@ export async function searchRateLimitMiddleware(request: FastifyRequest, reply: 
   reply.header('X-RateLimit-Reset', result.resetAt);
 
   if (!result.allowed) {
-    const upgradeMessage =
-      plan === 'guest'
-        ? 'Sign up for a free account to get 20 searches per day, or upgrade to Pro for unlimited searches.'
-        : plan === 'free'
-          ? 'Upgrade to Pro for unlimited searches.'
-          : '';
-
     return reply.status(429).send({
       error: 'Too Many Requests',
-      message: `You've reached your daily search limit of ${limits.searches} searches. ${upgradeMessage}`,
+      message: `You've reached your daily search limit of ${limits.searches} searches. Sign up for a free account to get unlimited searches!`,
       resetAt: new Date(result.resetAt * 1000).toISOString(),
     });
   }
