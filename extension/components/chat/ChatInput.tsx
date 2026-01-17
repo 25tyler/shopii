@@ -49,7 +49,7 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
       <button
         onClick={handleSubmit}
         disabled={!value.trim() || disabled}
-        className="absolute right-2 bottom-2.5 w-8 h-8 rounded-xl bg-accent-orange hover:bg-accent-orange-dark disabled:bg-glass-dark disabled:text-text-quaternary flex items-center justify-center transition-all disabled:cursor-not-allowed shadow-sm"
+        className="absolute right-2 bottom-2.5 w-8 h-8 rounded-xl bg-accent-orange hover:bg-accent-orange-dark disabled:bg-accent-orange/30 disabled:text-white/50 flex items-center justify-center transition-all disabled:cursor-not-allowed shadow-sm"
       >
         <SendIcon className="w-4 h-4 text-white" />
       </button>

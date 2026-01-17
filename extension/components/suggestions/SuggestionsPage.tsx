@@ -161,31 +161,17 @@ export function SuggestionsPage() {
   return (
     <div className="h-full overflow-y-auto bg-background-primary" onScroll={handleScroll}>
       {/* Header */}
-      <div className="sticky top-0 bg-glass-light backdrop-blur-lg px-6 py-5 z-10 shadow-glass-sm">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-light text-text-primary mb-1">For You</h2>
-            <p className="text-sm text-text-secondary">Personalized product recommendations</p>
-          </div>
-          <button
-            onClick={handleRefresh}
-            disabled={isLoading}
-            className="p-2 text-accent-orange hover:bg-glass backdrop-blur-sm rounded-xl transition-all disabled:opacity-50 shadow-glass-sm"
-            title="Refresh suggestions"
-          >
-            <RefreshIcon className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
+      <div className="sticky top-0 bg-glass backdrop-blur-lg px-5 py-4 z-10 shadow-glass-sm">
         {/* Show learned preferences indicator */}
         {(learnedCategories.length > 0 || learnedBrands.length > 0) && (
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {learnedCategories.slice(0, 3).map((cat) => (
-              <span key={cat} className="text-xs px-2.5 py-1 bg-accent-orange/10 text-accent-orange backdrop-blur-sm rounded-full">
+              <span key={cat} className="text-xs px-2 py-0.5 bg-accent-orange/10 text-accent-orange backdrop-blur-sm rounded-full">
                 {cat}
               </span>
             ))}
             {learnedBrands.slice(0, 2).map((brand) => (
-              <span key={brand} className="text-xs px-2.5 py-1 bg-accent-green/10 text-accent-green backdrop-blur-sm rounded-full">
+              <span key={brand} className="text-xs px-2 py-0.5 bg-accent-green/10 text-accent-green backdrop-blur-sm rounded-full">
                 {brand}
               </span>
             ))}

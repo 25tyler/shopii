@@ -12,14 +12,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   if (message.isLoading) {
     return (
       <div className="w-full py-4 px-5">
-        <div className="flex gap-3 items-start">
-          <div className="w-8 h-8 rounded-full bg-glass backdrop-blur-md flex items-center justify-center flex-shrink-0 shadow-glass-sm">
-            <span className="text-accent-orange text-sm font-medium">S</span>
-          </div>
-          <div className="flex-1 py-1">
-            <TypingIndicator />
-          </div>
-        </div>
+        <TypingIndicator />
       </div>
     );
   }
@@ -27,7 +20,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   if (isUser) {
     return (
       <div className="flex justify-end mb-4 px-5">
-        <div className="max-w-[85%] bg-glass backdrop-blur-md rounded-3xl rounded-tr-lg px-5 py-3 shadow-glass-sm">
+        <div className="max-w-[85%] bg-accent-orange/10 backdrop-blur-md rounded-3xl rounded-tr-lg px-5 py-3 shadow-glass-sm">
           <p className="text-text-primary text-sm whitespace-pre-wrap">{message.content}</p>
         </div>
       </div>
@@ -37,14 +30,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   // Assistant message - full width, no bubble
   return (
     <div className="w-full py-4 px-5 mb-2">
-      <div className="flex gap-3 items-start">
-        <div className="w-8 h-8 rounded-full bg-glass backdrop-blur-md flex items-center justify-center flex-shrink-0 shadow-glass-sm">
-          <span className="text-accent-orange text-sm font-medium">S</span>
-        </div>
-        <div className="flex-1 py-1">
-          <p className="text-text-primary text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
-        </div>
-      </div>
+      <p className="text-text-primary text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
     </div>
   );
 }

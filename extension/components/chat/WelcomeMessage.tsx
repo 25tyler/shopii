@@ -38,7 +38,7 @@ export function WelcomeMessage({ onSuggestionClick }: WelcomeMessageProps) {
           <button
             key={suggestion}
             onClick={() => onSuggestionClick?.(suggestion)}
-            className="w-full text-left px-5 py-4 bg-glass backdrop-blur-md rounded-2xl text-sm text-text-secondary hover:shadow-glass-sm transition-all shadow-glass-sm"
+            className="w-full text-left px-5 py-4 bg-glass backdrop-blur-md rounded-2xl text-sm text-text-secondary hover:shadow-glass transition-all duration-200 shadow-glass-sm hover:bg-glass-light"
           >
             "{suggestion}"
           </button>
