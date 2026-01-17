@@ -25,11 +25,11 @@ export function ProductCardComponent({ product }: ProductCardProps) {
   };
 
   return (
-    <div className="bg-background-secondary rounded-xl border border-border-light hover:shadow-md hover:border-border-medium transition-all overflow-hidden">
+    <div className="bg-glass backdrop-blur-md rounded-3xl hover:shadow-glass transition-all overflow-hidden shadow-glass-sm">
       {/* Product Header */}
       <div className="p-4 flex gap-3">
         {/* Image */}
-        <div className="w-24 h-24 bg-background-tertiary rounded-lg overflow-hidden flex-shrink-0">
+        <div className="w-24 h-24 bg-glass-dark backdrop-blur-sm rounded-2xl overflow-hidden flex-shrink-0">
           {product.imageUrl ? (
             <img
               src={product.imageUrl}
@@ -61,7 +61,7 @@ export function ProductCardComponent({ product }: ProductCardProps) {
       {/* Sponsored Badge */}
       {product.isSponsored && (
         <div className="px-4 pb-2">
-          <span className="text-xs text-text-tertiary bg-background-tertiary px-2 py-1 rounded">
+          <span className="text-xs text-text-tertiary bg-glass-dark backdrop-blur-sm px-2 py-1 rounded-lg">
             Sponsored
           </span>
         </div>
@@ -75,7 +75,7 @@ export function ProductCardComponent({ product }: ProductCardProps) {
       {/* Expandable Pros/Cons Toggle */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full px-4 py-3 text-sm text-text-secondary hover:bg-background-tertiary border-t border-border-light flex items-center justify-center gap-2 transition-colors"
+        className="w-full px-4 py-3 text-sm text-text-secondary hover:bg-glass-dark/30 backdrop-blur-sm flex items-center justify-center gap-2 transition-all"
       >
         {isExpanded ? 'Hide details' : 'Show pros & cons'}
         <ChevronIcon className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
@@ -83,7 +83,7 @@ export function ProductCardComponent({ product }: ProductCardProps) {
 
       {/* Expanded Content */}
       {isExpanded && (
-        <div className="px-4 pb-4 pt-3 border-t border-border-light animate-fade-in">
+        <div className="px-4 pb-4 pt-3 animate-fade-in bg-glass-light/30 backdrop-blur-sm">
           {/* Pros */}
           {product.pros && product.pros.length > 0 && (
             <div className="mb-4">
@@ -115,7 +115,7 @@ export function ProductCardComponent({ product }: ProductCardProps) {
           )}
 
           {/* Rating Details */}
-          <div className="pt-3 border-t border-border-light space-y-2">
+          <div className="pt-3 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-text-tertiary">Quality Score</span>
               <span className="font-medium text-text-primary">{product.aiRating}/100</span>
@@ -123,7 +123,7 @@ export function ProductCardComponent({ product }: ProductCardProps) {
             {product.matchScore !== undefined && (
               <div className="flex justify-between text-sm">
                 <span className="text-text-tertiary">Match</span>
-                <span className="font-medium text-accent-blue">{product.matchScore}%</span>
+                <span className="font-medium text-accent-orange">{product.matchScore}%</span>
               </div>
             )}
           </div>
@@ -131,10 +131,10 @@ export function ProductCardComponent({ product }: ProductCardProps) {
       )}
 
       {/* Buy Button */}
-      <div className="p-4 border-t border-border-light">
+      <div className="p-4">
         <button
           onClick={handleBuyClick}
-          className="w-full py-3 bg-accent-blue hover:bg-blue-600 text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+          className="w-full py-3 bg-accent-orange hover:bg-accent-orange-dark text-white text-sm font-medium rounded-2xl transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-md"
         >
           View on {product.retailer}
           <ExternalLinkIcon className="w-4 h-4" />

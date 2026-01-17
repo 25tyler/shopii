@@ -48,7 +48,7 @@ export function ChatContainer() {
 
       {/* Error Banner */}
       {error && (
-        <div className="mx-5 mb-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between">
+        <div className="mx-5 mb-3 px-4 py-3 bg-red-50/80 backdrop-blur-sm rounded-2xl shadow-glass-sm flex items-center justify-between">
           <span className="text-red-700 text-sm">{error}</span>
           <button
             onClick={clearError}
@@ -61,7 +61,7 @@ export function ChatContainer() {
 
       {/* Search Limit Warning */}
       {!user && guestSearchesUsed >= 3 && guestSearchesUsed < 5 && (
-        <div className="mx-5 mb-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+        <div className="mx-5 mb-3 px-4 py-3 bg-amber-50/80 backdrop-blur-sm rounded-2xl shadow-glass-sm">
           <p className="text-amber-800 text-sm">
             {5 - guestSearchesUsed} searches remaining today.{' '}
             <button className="underline hover:text-amber-900 transition-colors">
@@ -72,7 +72,7 @@ export function ChatContainer() {
       )}
 
       {/* Input Area */}
-      <div className="p-5 border-t border-border-light bg-background-secondary">
+      <div className="p-5 bg-glass-light/50 backdrop-blur-lg">
         <ChatInput
           onSend={handleSendMessage}
           disabled={isLoading || !canSendMessage}

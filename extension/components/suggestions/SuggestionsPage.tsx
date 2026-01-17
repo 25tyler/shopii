@@ -122,7 +122,7 @@ export function SuggestionsPage() {
     return (
       <div className="h-full flex items-center justify-center bg-background-primary">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-4 border-accent-blue border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-4 border-accent-orange border-t-transparent rounded-full animate-spin" />
           <p className="text-sm text-text-tertiary">Loading suggestions...</p>
         </div>
       </div>
@@ -136,7 +136,7 @@ export function SuggestionsPage() {
           <p className="text-red-600 mb-3">{error}</p>
           <button
             onClick={() => loadSuggestions(1)}
-            className="px-4 py-2 bg-accent-blue hover:bg-blue-600 text-white rounded-lg text-sm transition-colors"
+            className="px-4 py-2 bg-accent-orange hover:bg-accent-orange-dark text-white rounded-2xl text-sm transition-all shadow-sm"
           >
             Try Again
           </button>
@@ -161,7 +161,7 @@ export function SuggestionsPage() {
   return (
     <div className="h-full overflow-y-auto bg-background-primary" onScroll={handleScroll}>
       {/* Header */}
-      <div className="sticky top-0 bg-background-secondary border-b border-border-light px-6 py-5 z-10">
+      <div className="sticky top-0 bg-glass-light backdrop-blur-lg px-6 py-5 z-10 shadow-glass-sm">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-light text-text-primary mb-1">For You</h2>
@@ -170,7 +170,7 @@ export function SuggestionsPage() {
           <button
             onClick={handleRefresh}
             disabled={isLoading}
-            className="p-2 text-text-tertiary hover:text-text-primary hover:bg-background-tertiary rounded-lg transition-colors disabled:opacity-50"
+            className="p-2 text-accent-orange hover:bg-glass backdrop-blur-sm rounded-xl transition-all disabled:opacity-50 shadow-glass-sm"
             title="Refresh suggestions"
           >
             <RefreshIcon className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -180,12 +180,12 @@ export function SuggestionsPage() {
         {(learnedCategories.length > 0 || learnedBrands.length > 0) && (
           <div className="mt-3 flex flex-wrap gap-2">
             {learnedCategories.slice(0, 3).map((cat) => (
-              <span key={cat} className="text-xs px-2.5 py-1 bg-accent-blue/10 text-accent-blue border border-accent-blue/20 rounded-full">
+              <span key={cat} className="text-xs px-2.5 py-1 bg-accent-orange/10 text-accent-orange backdrop-blur-sm rounded-full">
                 {cat}
               </span>
             ))}
             {learnedBrands.slice(0, 2).map((brand) => (
-              <span key={brand} className="text-xs px-2.5 py-1 bg-accent-green/10 text-accent-green border border-accent-green/20 rounded-full">
+              <span key={brand} className="text-xs px-2.5 py-1 bg-accent-green/10 text-accent-green backdrop-blur-sm rounded-full">
                 {brand}
               </span>
             ))}
@@ -207,15 +207,15 @@ export function SuggestionsPage() {
         {/* Loading more indicator */}
         {isLoadingMore && (
           <div className="flex justify-center py-4">
-            <div className="w-6 h-6 border-4 border-accent-blue border-t-transparent rounded-full animate-spin" />
+            <div className="w-6 h-6 border-4 border-accent-orange border-t-transparent rounded-full animate-spin" />
           </div>
         )}
 
         {/* Deal Alert - upgrade prompt */}
-        <div className="p-5 bg-background-tertiary border border-border-light rounded-xl">
+        <div className="p-5 bg-glass backdrop-blur-md rounded-3xl shadow-glass-sm">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-accent-blue/10 flex items-center justify-center flex-shrink-0">
-              <DealIcon className="w-5 h-5 text-accent-blue" />
+            <div className="w-10 h-10 rounded-full bg-accent-orange/10 flex items-center justify-center flex-shrink-0">
+              <DealIcon className="w-5 h-5 text-accent-orange" />
             </div>
             <div className="flex-1">
               <p className="text-sm font-medium text-text-primary mb-1">
@@ -225,7 +225,7 @@ export function SuggestionsPage() {
                 Get unlimited searches and personalized recommendations
               </p>
             </div>
-            <button className="px-4 py-2 bg-accent-blue hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors">
+            <button className="px-4 py-2 bg-accent-orange hover:bg-accent-orange-dark text-white text-sm font-medium rounded-2xl transition-all shadow-sm">
               Upgrade
             </button>
           </div>

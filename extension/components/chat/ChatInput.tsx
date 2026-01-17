@@ -44,12 +44,12 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
         disabled={disabled}
         placeholder={placeholder || 'Ask about any product...'}
         rows={1}
-        className="w-full px-4 py-3 pr-12 bg-background-secondary border border-border-light rounded-xl text-sm text-text-primary placeholder:text-text-quaternary focus:outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/20 resize-none overflow-y-hidden transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full px-4 py-3 pr-12 bg-glass backdrop-blur-md rounded-2xl text-sm text-text-primary placeholder:text-text-quaternary focus:outline-none focus:ring-2 focus:ring-accent-orange/20 resize-none overflow-y-hidden transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-glass-sm"
       />
       <button
         onClick={handleSubmit}
         disabled={!value.trim() || disabled}
-        className="absolute right-2 bottom-2.5 w-8 h-8 rounded-lg bg-accent-blue hover:bg-blue-600 disabled:bg-background-tertiary flex items-center justify-center transition-colors"
+        className="absolute right-2 bottom-2.5 w-8 h-8 rounded-xl bg-accent-orange hover:bg-accent-orange-dark disabled:bg-glass-dark disabled:text-text-quaternary flex items-center justify-center transition-all disabled:cursor-not-allowed shadow-sm"
       >
         <SendIcon className="w-4 h-4 text-white" />
       </button>

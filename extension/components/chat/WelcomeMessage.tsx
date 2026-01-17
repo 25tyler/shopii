@@ -15,8 +15,8 @@ export function WelcomeMessage({ onSuggestionClick }: WelcomeMessageProps) {
   return (
     <div className="flex flex-col items-center justify-center h-full px-6 py-12">
       {/* Simple Icon/Logo */}
-      <div className="w-20 h-20 mb-6 rounded-2xl border-2 border-border-light bg-background-secondary flex items-center justify-center">
-        <span className="text-4xl font-light text-text-primary">S</span>
+      <div className="w-20 h-20 mb-6 rounded-3xl bg-glass backdrop-blur-md flex items-center justify-center shadow-glass">
+        <span className="text-4xl font-light text-accent-orange">S</span>
       </div>
 
       {/* Heading */}
@@ -38,7 +38,7 @@ export function WelcomeMessage({ onSuggestionClick }: WelcomeMessageProps) {
           <button
             key={suggestion}
             onClick={() => onSuggestionClick?.(suggestion)}
-            className="w-full text-left px-5 py-4 bg-background-secondary border border-border-light rounded-xl text-sm text-text-secondary hover:border-border-medium hover:shadow-sm transition-all"
+            className="w-full text-left px-5 py-4 bg-glass backdrop-blur-md rounded-2xl text-sm text-text-secondary hover:shadow-glass-sm transition-all shadow-glass-sm"
           >
             "{suggestion}"
           </button>

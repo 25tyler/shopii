@@ -18,7 +18,7 @@ export default function App() {
     return (
       <div className="flex items-center justify-center h-full bg-background-primary">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-accent-blue border-t-transparent rounded-full animate-spin" />
+          <div className="w-12 h-12 border-4 border-accent-orange border-t-transparent rounded-full animate-spin" />
           <p className="text-text-tertiary">Loading Shopii...</p>
         </div>
       </div>
@@ -32,11 +32,11 @@ export default function App() {
   return (
     <div className="flex flex-col h-full bg-background-primary">
       {/* Header */}
-      <header className="h-14 px-5 border-b border-border-light bg-background-secondary flex items-center justify-between flex-shrink-0">
+      <header className="h-14 px-5 bg-glass-light backdrop-blur-lg flex items-center justify-between flex-shrink-0 shadow-glass-sm">
         {/* Logo */}
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg border-2 border-border-light bg-background-secondary flex items-center justify-center">
-            <span className="text-text-primary font-light text-lg">S</span>
+          <div className="w-7 h-7 rounded-xl bg-glass backdrop-blur-md flex items-center justify-center shadow-glass-sm">
+            <span className="text-accent-orange font-medium text-lg">S</span>
           </div>
           <h1 className="text-base font-medium text-text-primary">Shopii</h1>
         </div>
@@ -65,7 +65,7 @@ export default function App() {
 
         {/* Settings */}
         <button
-          className="p-2 hover:bg-background-tertiary rounded-lg transition-colors"
+          className="p-2 hover:bg-glass backdrop-blur-sm rounded-xl transition-all shadow-glass-sm"
           title="Settings"
         >
           <SettingsIcon className="w-5 h-5 text-text-tertiary" />
@@ -117,9 +117,13 @@ function NavButton({
       onClick={onClick}
       title={title}
       className={`
-        px-3 h-9 flex items-center justify-center rounded-lg
-        transition-all duration-200 ease-out
-        ${active ? 'bg-accent-blue text-white' : 'text-text-tertiary hover:bg-background-tertiary'}
+        px-3 h-9 flex items-center justify-center rounded-xl
+        transition-all duration-200 ease-out shadow-glass-sm
+        ${
+          active
+            ? 'bg-accent-orange text-white'
+            : 'text-text-tertiary hover:bg-glass backdrop-blur-sm'
+        }
       `}
     >
       <Icon className="w-5 h-5" />
@@ -130,7 +134,7 @@ function NavButton({
 function PlaceholderScreen({ title, description }: { title: string; description: string }) {
   return (
     <div className="flex flex-col items-center justify-center h-full px-8 py-12 bg-background-primary">
-      <div className="w-16 h-16 rounded-2xl border-2 border-border-light bg-background-secondary flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-3xl bg-glass backdrop-blur-md flex items-center justify-center mb-6 shadow-glass">
         <span className="text-3xl">📦</span>
       </div>
       <h2 className="text-xl font-light text-text-primary mb-2">{title}</h2>

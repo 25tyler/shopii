@@ -6,16 +6,16 @@ interface RatingBadgeProps {
 }
 
 export function RatingBadge({ rating, size = 'md' }: RatingBadgeProps) {
-  const getBorderColor = (rating: number) => {
-    if (rating >= 85) return 'border-accent-green';
-    if (rating >= 70) return 'border-accent-blue';
-    if (rating >= 55) return 'border-accent-amber';
-    return 'border-accent-red';
+  const getBackgroundColor = (rating: number) => {
+    if (rating >= 85) return 'bg-accent-green/10';
+    if (rating >= 70) return 'bg-accent-orange/10';
+    if (rating >= 55) return 'bg-accent-amber/10';
+    return 'bg-accent-red/10';
   };
 
   const getTextColor = (rating: number) => {
     if (rating >= 85) return 'text-accent-green';
-    if (rating >= 70) return 'text-accent-blue';
+    if (rating >= 70) return 'text-accent-orange';
     if (rating >= 55) return 'text-accent-amber';
     return 'text-accent-red';
   };
@@ -28,8 +28,8 @@ export function RatingBadge({ rating, size = 'md' }: RatingBadgeProps) {
   return (
     <div
       className={`
-        rounded-lg border-2 bg-background-secondary shadow-xs flex-shrink-0
-        ${getBorderColor(rating)}
+        rounded-xl backdrop-blur-sm shadow-glass-sm flex-shrink-0
+        ${getBackgroundColor(rating)}
         ${sizeClasses[size]}
       `}
       title={`AI Rating: ${rating}/100`}
