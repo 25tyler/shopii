@@ -109,11 +109,18 @@ export function ProductCardComponent({ product }: ProductCardProps) {
             </ul>
           </div>
 
-          {/* Confidence */}
-          <div className="mt-3 pt-3 border-t border-slate-700">
-            <p className="text-xs text-slate-500">
-              Confidence: {Math.round(product.confidence * 100)}% based on aggregated reviews
-            </p>
+          {/* Rating Details */}
+          <div className="mt-3 pt-3 border-t border-slate-700 space-y-1">
+            <div className="flex justify-between text-xs">
+              <span className="text-slate-500">Quality Score:</span>
+              <span className="text-slate-300 font-medium">{product.aiRating}/100</span>
+            </div>
+            {product.matchScore !== undefined && (
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Query Match:</span>
+                <span className="text-cyan-400 font-medium">{product.matchScore}%</span>
+              </div>
+            )}
           </div>
         </div>
       )}

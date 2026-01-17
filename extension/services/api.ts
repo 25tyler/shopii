@@ -43,20 +43,50 @@ class ApiClient {
       requestHeaders['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      method,
-      headers: requestHeaders,
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    const url = `${this.baseUrl}${endpoint}`;
+    console.log(`[API] ${method} ${url}`, { body, hasToken: !!token });
 
-    const data = await response.json();
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: requestHeaders,
+        body: body ? JSON.stringify(body) : undefined,
+      });
 
-    if (!response.ok) {
-      const error = data as ApiError;
-      throw new Error(error.message || 'API request failed');
+      console.log(`[API] Response status: ${response.status} ${response.statusText}`);
+
+      const text = await response.text();
+      console.log(`[API] Raw response length: ${text.length} chars`);
+      console.log(`[API] Raw response preview:`, text.slice(0, 500));
+
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseError) {
+        console.error(`[API] JSON parse error:`, parseError);
+        console.error(`[API] Raw text was:`, text);
+        throw new Error('Failed to parse API response as JSON');
+      }
+
+      console.log(`[API] Parsed response:`, {
+        hasMessage: !!data?.message,
+        messageLength: data?.message?.length,
+        productsCount: data?.products?.length,
+        products: data?.products?.map((p: any) => ({ id: p.id, name: p.name })),
+        conversationId: data?.conversationId,
+      });
+
+      if (!response.ok) {
+        const error = data as ApiError;
+        console.error(`[API] Error response:`, error);
+        throw new Error(error.message || 'API request failed');
+      }
+
+      return data as T;
+    } catch (fetchError) {
+      console.error(`[API] Fetch error:`, fetchError);
+      throw fetchError;
     }
-
-    return data as T;
   }
 
   // Auth endpoints

@@ -4,8 +4,10 @@ import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.dev.js';
 import { generateChatResponse, generateResearchBasedResponse, detectIntent } from '../services/ai.openai.js';
-import { conductProductResearch } from '../services/research.service.js';
-import { extractProductsFromResearch, fetchProductImages, ExtractedProduct } from '../services/product-extraction.service.js';
+import { conductProductResearch, enrichProducts } from '../services/research.service.js';
+import { extractProductsFromResearch, fetchProductImages, enhanceProductsWithEnrichment, ExtractedProduct } from '../services/product-extraction.service.js';
+import { cacheProducts, searchCachedProducts } from '../services/product-cache.service.js';
+import { learnFromSearch } from '../services/preference-learning.service.js';
 
 const ChatMessageRequestSchema = z.object({
   message: z.string().min(1).max(2000),
@@ -110,6 +112,10 @@ export async function devChatRoutes(fastify: FastifyInstance) {
         fastify.log.info(`Conducting research for: "${message}"`);
 
         try {
+          // First, check if we have cached products that match this query
+          const cachedMatches = await searchCachedProducts(message, 5);
+          fastify.log.info(`Found ${cachedMatches.length} cached products matching query`);
+
           // Search Reddit, forums, and review sites for real recommendations
           const research = await conductProductResearch(message);
           researchSources = research.sources.map((s) => ({ title: s.title, url: s.url }));
@@ -120,9 +126,27 @@ export async function devChatRoutes(fastify: FastifyInstance) {
           extractedProducts = await extractProductsFromResearch(message, research.context);
           fastify.log.info(`Extracted ${extractedProducts.length} products`);
 
+          // Run enrichment and image fetching in parallel for speed
+          // Enrichment searches for product-specific details to fill in gaps
+          const [enrichmentMap] = await Promise.all([
+            enrichProducts(extractedProducts.map((p) => ({ name: p.name, brand: p.brand }))),
+            // Image fetching runs in parallel too
+          ]);
+          fastify.log.info(`Enriched product data from ${enrichmentMap.size} searches`);
+
+          // Enhance products that have sparse details with enrichment data
+          extractedProducts = await enhanceProductsWithEnrichment(extractedProducts, enrichmentMap);
+          fastify.log.info(`Enhanced products with enrichment data`);
+
           // Fetch product images
           extractedProducts = await fetchProductImages(extractedProducts);
           fastify.log.info(`Fetched images for products`);
+
+          // Cache the extracted products for future queries (async, don't wait)
+          cacheProducts(extractedProducts).catch((err) => {
+            fastify.log.error(`Failed to cache products: ${err.message}`);
+          });
+          fastify.log.info(`Caching ${extractedProducts.length} products in background`);
 
           // Generate response based on extracted products (so AI only discusses products we have cards for)
           aiResponse = await generateResearchBasedResponse(
@@ -136,10 +160,10 @@ export async function devChatRoutes(fastify: FastifyInstance) {
             extractedProducts.map((p) => ({
               name: p.name,
               brand: p.brand,
-              whyRecommended: p.whyRecommended,
+              whyRecommended: p.description,
               pros: p.pros,
               cons: p.cons,
-              confidenceScore: p.confidenceScore,
+              confidenceScore: p.qualityScore,
               endorsementQuotes: p.endorsementQuotes,
             }))
           );
@@ -198,13 +222,21 @@ export async function devChatRoutes(fastify: FastifyInstance) {
         });
       }
 
+      // Learn from this search to improve "For You" recommendations
+      if (extractedProducts.length > 0) {
+        // Run in background - don't block the response
+        learnFromSearch(userId, message, extractedProducts).catch((err) => {
+          console.error('[Chat] Failed to learn from search:', err);
+        });
+      }
+
       return {
         message: aiResponse,
         products: extractedProducts.map((p) => ({
           id: `${p.brand}-${p.name}`.toLowerCase().replace(/\s+/g, '-'),
           name: p.name,
           brand: p.brand,
-          description: p.whyRecommended || '',
+          description: p.description || '',
           imageUrl: p.imageUrl || '',
           price: p.estimatedPrice
             ? {
@@ -217,9 +249,10 @@ export async function devChatRoutes(fastify: FastifyInstance) {
           affiliateUrl: p.affiliateUrl || '',
           retailer: p.retailer || 'Amazon',
           sourcesCount: p.sourcesCount || 1,
-          // Use actual confidence from research-based extraction
-          aiRating: p.confidenceScore || 75, // Direct from AI analysis
-          confidence: (p.confidenceScore || 75) / 100, // Convert to 0-1 scale
+          // Two separate ratings
+          aiRating: p.qualityScore || 75, // General product quality (cached)
+          confidence: (p.matchScore || 75) / 100, // Query match/relevance (per-search)
+          matchScore: p.matchScore || 75, // Explicit match score for sorting
           endorsementStrength: p.endorsementStrength || 'moderate',
           endorsementQuotes: p.endorsementQuotes || [],
           sourceTypes: p.sourceTypes || [],

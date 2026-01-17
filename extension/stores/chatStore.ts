@@ -85,6 +85,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
 
     try {
+      console.log('[ChatStore] Sending message:', content);
+      console.log('[ChatStore] ConversationId:', conversationId);
+      console.log('[ChatStore] PageContext:', state.pageContext);
+
       // Call real API
       const response = await api.sendMessage({
         message: content,
@@ -92,7 +96,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         pageContext: state.pageContext || undefined,
       });
 
+      console.log('[ChatStore] API response received:', {
+        messageLength: response.message?.length,
+        productsCount: response.products?.length,
+        conversationId: response.conversationId,
+      });
+
       // Map API response to ProductCard format
+      console.log('[ChatStore] Mapping products. Raw products:', response.products);
       const products: ProductCard[] = response.products.map((p) => ({
         id: p.id,
         name: p.name,
@@ -100,6 +111,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         imageUrl: p.imageUrl,
         price: p.price,
         aiRating: p.aiRating || 0,
+        matchScore: p.matchScore || 0, // Query relevance score
         confidence: p.confidence || 0,
         pros: p.pros,
         cons: p.cons,
@@ -108,6 +120,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         isSponsored: p.isSponsored,
       }));
 
+      console.log('[ChatStore] Mapped products:', products.length, products.map(p => p.name));
+
       const assistantMessage: Message = {
         id: crypto.randomUUID(),
         role: 'assistant',
@@ -115,6 +129,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         timestamp: Date.now(),
         products: products.length > 0 ? products : undefined,
       };
+
+      console.log('[ChatStore] Assistant message created:', {
+        hasProducts: !!assistantMessage.products,
+        productsCount: assistantMessage.products?.length,
+      });
 
       // Update with server response and potentially new conversationId
       set((state) => ({
@@ -140,6 +159,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const updatedState = get();
       chrome.storage.local.set({ conversations: updatedState.conversations });
     } catch (error) {
+      console.error('[ChatStore] Error sending message:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to get response. Please try again.';
 
       set((state) => ({

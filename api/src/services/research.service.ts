@@ -1,5 +1,6 @@
 // Product research service - searches Reddit, forums, and reviews for real recommendations
 import { tavily } from '@tavily/core';
+import { generateSearchStrategy } from './ai.openai.js';
 
 // Lazy initialization
 let _tavily: ReturnType<typeof tavily> | null = null;
@@ -30,271 +31,40 @@ interface ResearchResult {
   summary: string;
 }
 
-// Comprehensive list of forums and community sites for product research
-const COMMUNITY_DOMAINS = [
-  // General
-  'reddit.com', // Covers ALL subreddits - r/BuyItForLife, r/frugal, r/onebag, etc.
 
-  // Tech & Electronics
-  'head-fi.org', // Audiophile headphones
-  'audiosciencereview.com', // Audio measurements and reviews
-  'avsforum.com', // Home theater, AV equipment
-  'gearspace.com', // Pro audio equipment
-  'dpreview.com', // Cameras and photography
-  'fredmiranda.com', // Photography forums
-  'mu-43.com', // Mirrorless cameras
-  'overclock.net', // PC hardware, overclocking
-  'hardforum.com', // PC hardware
-  'linustechtips.com', // Tech discussions
-  'notebookreview.com', // Laptops
-  'anandtech.com', // Tech reviews
-
-  // Fashion & Clothing
-  'styleforum.net', // Men's fashion, quality clothing
-  'askandyaboutclothes.com', // Men's clothing
-  'thefedoralounge.com', // Vintage fashion, hats
-  'denimio.com', // Raw denim
-  'rawrdenim.com', // Denim reviews
-  'heddels.com', // Raw denim and workwear
-  'putthison.com', // Quality menswear
-  'dieworkwear.com', // Quality basics and workwear
-  'permanentstyle.com', // Classic menswear
-  'ironheart.co.uk/forum', // Heavy denim
-  'supertalk.superfuture.com', // Streetwear and fashion
-
-  // Outdoor & Sports
-  'backpackinglight.com', // Ultralight hiking gear
-  'whiteblaze.net', // Hiking, Appalachian Trail
-  'candlepowerforums.com', // Flashlights
-  'bladeforums.com', // Knives, EDC
-  'edcforums.com', // Everyday carry
-  'bikeforums.net', // Cycling
-  'mtbr.com', // Mountain biking
-  'thetruthaboutcars.com', // Automotive
-  'bobistheoilguy.com', // Automotive maintenance
-
-  // Home & Kitchen
-  'gardenforums.com', // Gardening
-  'cookingforums.net', // Cooking equipment
-  'houzz.com', // Home improvement
-  'contractortalk.com', // Tools, construction
-
-  // Health & Fitness
-  't-nation.com', // Fitness, supplements
-  'bodybuilding.com', // Fitness forums
-  'longecity.org', // Supplements, longevity
-
-  // Hobbies
-  'watchuseek.com', // Watches
-  'rolexforums.com', // Luxury watches
-  'fountainpennetwork.com', // Fountain pens
-  'ar15.com', // Firearms
-  'thehighroad.org', // Firearms
-  'homebrewtalk.com', // Homebrewing
-  'coffeeforums.com', // Coffee equipment
-  'home-barista.com', // Espresso machines
-
-  // Gaming
-  'resetera.com', // Gaming discussions
-  'neogaf.com', // Gaming
-  'pcgamer.com', // PC gaming
-
-  // International
-  'forums.whirlpool.net.au', // Australian tech
-  'redflagdeals.com', // Canadian deals/reviews
-  'hukd.com', // UK deals/reviews
-];
-
-// Expert review sites (separate from forums - these have professional reviews)
-const EXPERT_REVIEW_DOMAINS = [
-  // Tech
-  'wirecutter.com',
-  'rtings.com',
-  'cnet.com',
-  'techradar.com',
-  'tomsguide.com',
-  'pcmag.com',
-  'theverge.com',
-  'engadget.com',
-  // Outdoor
-  'outdoorgearlab.com',
-  'switchbacktravel.com',
-  'cleverhiker.com',
-  'runnersworld.com',
-  'bicycling.com',
-  // Home & Kitchen
-  'seriouseats.com',
-  'americastestkitchen.com',
-  'consumerreports.org',
-  // Fashion & Lifestyle
-  'gearpatrol.com',
-  'gq.com',
-  'esquire.com',
-  'menshealth.com',
-  'highsnobiety.com',
-  'hypebeast.com',
-];
-
-// Detect category from query to customize search approach
-function detectQueryCategory(query: string): 'tech' | 'fashion' | 'home' | 'outdoor' | 'fitness' | 'general' {
-  const q = query.toLowerCase();
-
-  // Fashion/Apparel keywords
-  if (q.match(/\b(shirt|tee|t-shirt|pants|jeans|sweatpants|hoodie|jacket|coat|shoes|boots|sneakers|dress|clothing|apparel|wear|denim|cotton|wool|cashmere|leather)\b/)) {
-    return 'fashion';
-  }
-
-  // Tech keywords
-  if (q.match(/\b(headphones|earbuds|laptop|phone|monitor|keyboard|mouse|speaker|camera|tv|computer|pc|gaming|audio|wireless|bluetooth)\b/)) {
-    return 'tech';
-  }
-
-  // Home/Kitchen keywords
-  if (q.match(/\b(kitchen|cookware|pan|pot|knife|appliance|vacuum|mattress|pillow|sheets|furniture|blender|coffee|espresso)\b/)) {
-    return 'home';
-  }
-
-  // Outdoor/Sports keywords
-  if (q.match(/\b(hiking|camping|backpack|tent|bike|cycling|running|fitness|gym|outdoor|trail|climbing)\b/)) {
-    return 'outdoor';
-  }
-
-  // Fitness keywords
-  if (q.match(/\b(workout|exercise|protein|supplement|weights|yoga|gym equipment)\b/)) {
-    return 'fitness';
-  }
-
-  return 'general';
-}
-
-// Generate search queries tailored to the category
-function generateSearchQueries(query: string, category: string): string[] {
-  switch (category) {
-    case 'fashion':
-      return [
-        // Fashion-specific subreddits and language
-        `${query} site:reddit.com/r/malefashionadvice OR site:reddit.com/r/frugalmalefashion`,
-        `${query} reddit "go-to" OR "favorite" OR "love these"`,
-        `${query} reddit "quality" OR "well made" OR "holds up"`,
-        `best ${query} "buy it for life" OR "worth the money"`,
-        `${query} styleforum OR heddels recommendation`,
-        `${query} review "comfortable" OR "fits great" OR "perfect"`,
-        // Brand discovery
-        `${query} reddit "underrated" OR "hidden gem" OR "slept on"`,
-      ];
-
-    case 'tech':
-      return [
-        // Tech-specific language
-        `${query} reddit "best" OR "highly recommend" OR "can't go wrong"`,
-        `${query} reddit "gold standard" OR "hands down" OR "no contest"`,
-        `${query} site:reddit.com megathread OR guide`,
-        `${query} head-fi OR audiosciencereview recommendation`,
-        `${query} "worth every penny" OR "best in class"`,
-        `${query} comparison "winner" OR "beats" OR "nothing comes close"`,
-      ];
-
-    case 'home':
-      return [
-        `${query} reddit "game changer" OR "life changing" OR "best purchase"`,
-        `${query} site:reddit.com/r/BuyItForLife OR site:reddit.com/r/cookware`,
-        `${query} "worth the investment" OR "buy once"`,
-        `best ${query} wirecutter OR serious eats`,
-        `${query} review "durable" OR "well built" OR "quality"`,
-      ];
-
-    case 'outdoor':
-      return [
-        `${query} reddit "trust my life" OR "never failed" OR "bombproof"`,
-        `${query} site:reddit.com/r/CampingGear OR site:reddit.com/r/ultralight`,
-        `${query} backpackinglight recommendation`,
-        `best ${query} outdoorgearlab OR switchbacktravel`,
-        `${query} "tried and true" OR "go-to" OR "workhorse"`,
-      ];
-
-    case 'fitness':
-      return [
-        `${query} reddit "gains" OR "results" OR "works great"`,
-        `${query} site:reddit.com/r/fitness OR site:reddit.com/r/homegym`,
-        `best ${query} "bang for buck" OR "worth it"`,
-        `${query} review bodybuilding OR t-nation`,
-      ];
-
-    default:
-      return [
-        `${query} reddit "best" OR "highly recommend"`,
-        `${query} reddit "buy it for life" OR "worth every penny"`,
-        `best ${query} forum recommendation`,
-        `${query} "the best" OR "my favorite" OR "go-to"`,
-        `${query} comparison review`,
-      ];
-  }
-}
-
-// Get category-specific scoring signals
-function getCategoryScoringSignals(category: string): { phrases: string[], weight: number }[] {
-  const baseSignals = [
-    { phrases: ['best', 'highly recommend'], weight: 3 },
-    { phrases: ['buy it for life', 'worth every penny'], weight: 4 },
-  ];
-
-  switch (category) {
-    case 'fashion':
-      return [
-        ...baseSignals,
-        { phrases: ['go-to', 'favorite', 'love these', 'perfect fit'], weight: 4 },
-        { phrases: ['quality', 'well made', 'holds up', 'comfortable'], weight: 3 },
-        { phrases: ['underrated', 'hidden gem', 'slept on'], weight: 3 },
-      ];
-
-    case 'tech':
-      return [
-        ...baseSignals,
-        { phrases: ['gold standard', 'hands down', 'no contest'], weight: 4 },
-        { phrases: ['best in class', 'nothing comes close'], weight: 4 },
-      ];
-
-    case 'home':
-      return [
-        ...baseSignals,
-        { phrases: ['game changer', 'life changing', 'best purchase'], weight: 4 },
-        { phrases: ['durable', 'well built', 'buy once'], weight: 3 },
-      ];
-
-    case 'outdoor':
-      return [
-        ...baseSignals,
-        { phrases: ['bombproof', 'never failed', 'trust my life'], weight: 4 },
-        { phrases: ['tried and true', 'workhorse'], weight: 3 },
-      ];
-
-    default:
-      return baseSignals;
-  }
-}
 
 // Step 1: Search Reddit/forums for what people actually recommend
 export async function searchForRecommendations(query: string): Promise<ResearchResult> {
   const client = getTavily();
 
-  // Detect category and generate tailored queries
-  const category = detectQueryCategory(query);
-  const searchQueries = generateSearchQueries(query, category);
-  const scoringSignals = getCategoryScoringSignals(category);
+  // Have AI generate optimized search queries and select relevant domains
+  const strategy = await generateSearchStrategy(query);
 
-  console.log(`Detected category: ${category}, using ${searchQueries.length} tailored queries`);
+  console.log(`AI search strategy for "${query}":`, {
+    queries: strategy.searchQueries.length,
+    domains: strategy.priorityDomains.length,
+    intent: strategy.searchIntent,
+  });
 
-  const allResults: Array<{ title: string; url: string; content: string; score: number }> = [];
+  const allResults: Array<{ title: string; url: string; content: string }> = [];
   const seenUrls = new Set<string>();
 
-  // Search community forums with more queries and results
-  for (const searchQuery of searchQueries) {
+  // Use AI's priority domains - these are tailored to the query
+  // If AI returns empty or just reddit, don't restrict domains at all
+  const domainsToSearch = strategy.priorityDomains.length > 1
+    ? strategy.priorityDomains
+    : undefined; // undefined = search all domains
+
+  console.log(`Searching domains:`, domainsToSearch || 'all (no restriction)');
+
+  // Search using AI-generated queries
+  for (const searchQuery of strategy.searchQueries) {
     try {
       const response = await client.search(searchQuery, {
         searchDepth: 'advanced',
-        maxResults: 8, // Increased from 5
+        maxResults: 10,
         includeAnswer: false,
-        includeDomains: COMMUNITY_DOMAINS,
+        ...(domainsToSearch && { includeDomains: domainsToSearch }),
       });
 
       if (response.results) {
@@ -303,43 +73,11 @@ export async function searchForRecommendations(query: string): Promise<ResearchR
           if (seenUrls.has(result.url)) continue;
           seenUrls.add(result.url);
 
-          // Score results based on category-specific signals
-          let score = 0;
-          const contentLower = result.content.toLowerCase();
-          const titleLower = result.title.toLowerCase();
-
-          // Apply category-specific scoring signals
-          for (const signal of scoringSignals) {
-            for (const phrase of signal.phrases) {
-              if (contentLower.includes(phrase)) {
-                score += signal.weight;
-                break; // Only count each signal group once
-              }
-            }
-          }
-
-          // Reddit-specific signals
-          if (result.url.includes('reddit.com')) {
-            score += 2;
-            if (titleLower.includes('guide') || titleLower.includes('megathread')) score += 3;
-          }
-
-          // Expert forum signals (category-aware)
-          if (category === 'tech') {
-            if (result.url.includes('head-fi.org') || result.url.includes('audiosciencereview')) score += 3;
-          } else if (category === 'fashion') {
-            if (result.url.includes('styleforum.net') || result.url.includes('heddels.com')) score += 3;
-          } else if (category === 'home') {
-            if (result.url.includes('home-barista.com') || result.url.includes('cookingforums')) score += 3;
-          } else if (category === 'outdoor') {
-            if (result.url.includes('backpackinglight.com') || result.url.includes('mtbr.com')) score += 3;
-          }
-
+          // No scoring here - let the AI extraction service evaluate quality
           allResults.push({
             title: result.title,
             url: result.url,
             content: result.content,
-            score,
           });
         }
       }
@@ -348,43 +86,52 @@ export async function searchForRecommendations(query: string): Promise<ResearchR
     }
   }
 
-  // Search expert review sites with more results
-  try {
-    const expertResponse = await client.search(`best ${query} review 2024 2023`, {
-      searchDepth: 'advanced', // Upgraded from basic
-      maxResults: 6, // Increased from 3
-      includeAnswer: false,
-      includeDomains: EXPERT_REVIEW_DOMAINS,
-    });
+  console.log(`Found ${allResults.length} total sources from AI-generated queries`);
 
-    if (expertResponse.results) {
-      for (const result of expertResponse.results) {
-        if (seenUrls.has(result.url)) continue;
-        seenUrls.add(result.url);
+  // If we got very few results, try broader fallback searches
+  if (allResults.length < 5) {
+    console.log(`Low results (${allResults.length}), trying broader fallback searches...`);
 
-        // Expert reviews get high base score
-        let score = 5;
-        if (result.url.includes('wirecutter') || result.url.includes('rtings')) score += 3;
+    const fallbackQueries = [
+      `best ${query} reddit`,
+      `${query} recommendation`,
+      `${query} review`,
+    ];
 
-        allResults.push({
-          title: result.title,
-          url: result.url,
-          content: result.content,
-          score,
+    for (const fallbackQuery of fallbackQueries) {
+      try {
+        const response = await client.search(fallbackQuery, {
+          searchDepth: 'advanced',
+          maxResults: 10,
+          includeAnswer: false,
+          // No domain restriction for fallback - search everywhere
         });
+
+        if (response.results) {
+          for (const result of response.results) {
+            if (seenUrls.has(result.url)) continue;
+            seenUrls.add(result.url);
+            allResults.push({
+              title: result.title,
+              url: result.url,
+              content: result.content,
+            });
+          }
+        }
+      } catch (error) {
+        console.error(`Fallback search failed for "${fallbackQuery}":`, error);
       }
     }
-  } catch (error) {
-    console.error('Expert review search failed:', error);
+
+    console.log(`After fallback: ${allResults.length} total sources`);
   }
 
-  // Sort by score and take top results
-  allResults.sort((a, b) => b.score - a.score);
-
+  // Return all results for AI to evaluate - no pre-scoring needed
+  // The extraction AI will determine which sources have strong recommendations
   return {
     query,
     recommendedProducts: [], // Will be extracted by AI
-    rawSources: allResults.slice(0, 15).map(({ title, url, content }) => ({ title, url, content })),
+    rawSources: allResults.slice(0, 25), // Give AI more sources to analyze
     summary: '',
   };
 }
@@ -438,11 +185,11 @@ export async function conductProductResearch(userQuery: string): Promise<{
   context += `=== RESEARCH FINDINGS FROM REDDIT, FORUMS, AND EXPERT REVIEW SITES ===\n\n`;
 
   // Include more sources and more content from each
-  for (const source of recommendations.rawSources.slice(0, 12)) {
+  for (const source of recommendations.rawSources.slice(0, 15)) {
     const sourceType = getSourceType(source.url);
     context += `--- [${sourceType}] ${source.title} ---\n`;
     context += `URL: ${source.url}\n`;
-    context += `${source.content.slice(0, 2000)}\n\n`; // Increased from 1500
+    context += `${source.content.slice(0, 3000)}\n\n`; // Increased to 3000 for richer context
   }
 
   context += `\n=== CRITICAL ANALYSIS INSTRUCTIONS ===
@@ -494,4 +241,103 @@ function getSourceType(url: string): string {
   if (url.includes('wirecutter') || url.includes('rtings.com') || url.includes('outdoorgearlab')) return 'EXPERT REVIEW';
   if (url.includes('youtube.com')) return 'YOUTUBE';
   return 'REVIEW SITE';
+}
+
+// Parallel product enrichment - searches for specific product info to enhance details
+export interface ProductEnrichmentResult {
+  productName: string;
+  additionalSources: Array<{
+    title: string;
+    url: string;
+    content: string;
+    sourceType: string;
+  }>;
+  enrichmentContext: string;
+}
+
+// Search for specific product details (used to enrich products after initial extraction)
+export async function enrichProductDetails(
+  productName: string,
+  brand: string
+): Promise<ProductEnrichmentResult> {
+  const client = getTavily();
+  const fullName = brand ? `${brand} ${productName}` : productName;
+
+  const searchQueries = [
+    `"${fullName}" review pros cons`,
+    `"${fullName}" reddit recommendation`,
+  ];
+
+  const results: Array<{ title: string; url: string; content: string; sourceType: string }> = [];
+  const seenUrls = new Set<string>();
+
+  // Run searches in parallel for speed
+  const searchPromises = searchQueries.map(async (query) => {
+    try {
+      const response = await client.search(query, {
+        searchDepth: 'basic', // Use basic for speed
+        maxResults: 5,
+        includeAnswer: false,
+      });
+      return response.results || [];
+    } catch (error) {
+      console.error(`Enrichment search failed for "${query}":`, error);
+      return [];
+    }
+  });
+
+  const searchResults = await Promise.all(searchPromises);
+
+  for (const resultSet of searchResults) {
+    for (const result of resultSet) {
+      if (seenUrls.has(result.url)) continue;
+      seenUrls.add(result.url);
+      results.push({
+        title: result.title,
+        url: result.url,
+        content: result.content,
+        sourceType: getSourceType(result.url),
+      });
+    }
+  }
+
+  // Build enrichment context
+  let enrichmentContext = `\n=== ADDITIONAL DETAILS FOR ${fullName.toUpperCase()} ===\n\n`;
+  for (const source of results.slice(0, 4)) {
+    enrichmentContext += `[${source.sourceType}] ${source.title}\n`;
+    enrichmentContext += `${source.content.slice(0, 1500)}\n\n`;
+  }
+
+  return {
+    productName: fullName,
+    additionalSources: results,
+    enrichmentContext,
+  };
+}
+
+// Enrich multiple products in parallel (called after initial extraction)
+export async function enrichProducts(
+  products: Array<{ name: string; brand: string }>
+): Promise<Map<string, ProductEnrichmentResult>> {
+  const enrichmentMap = new Map<string, ProductEnrichmentResult>();
+
+  // Only enrich up to 5 products to limit latency
+  const productsToEnrich = products.slice(0, 5);
+
+  console.log(`Enriching ${productsToEnrich.length} products in parallel...`);
+
+  const enrichPromises = productsToEnrich.map(async (product) => {
+    const result = await enrichProductDetails(product.name, product.brand);
+    return { key: `${product.brand} ${product.name}`.toLowerCase(), result };
+  });
+
+  const results = await Promise.all(enrichPromises);
+
+  for (const { key, result } of results) {
+    enrichmentMap.set(key, result);
+  }
+
+  console.log(`Enrichment complete for ${enrichmentMap.size} products`);
+
+  return enrichmentMap;
 }
