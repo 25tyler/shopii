@@ -1,18 +1,33 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ChatContainer } from '../../components/chat/ChatContainer';
 import { SuggestionsPage } from '../../components/suggestions/SuggestionsPage';
 import { OnboardingFlow } from '../../components/onboarding/OnboardingFlow';
+import { SettingsPage } from '../../components/settings/SettingsPage';
+import { SettingsDropdown } from '../../components/settings/SettingsDropdown';
 import { useUserStore } from '../../stores/userStore';
 
 type Route = 'search' | 'saved' | 'for-you';
+type SettingsTab = 'account' | 'preferences' | 'upgrade';
 
 export default function App() {
   const [activeRoute, setActiveRoute] = useState<Route>('search');
-  const { isOnboarded, isLoading, initialize } = useUserStore();
+  const [showSettingsDropdown, setShowSettingsDropdown] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('account');
+  const { isOnboarded, isLoading, initialize, user } = useUserStore();
 
   useEffect(() => {
     initialize();
   }, [initialize]);
+
+  // Close modal when user signs in
+  useEffect(() => {
+    if (user && showSettingsModal) {
+      setShowSettingsModal(false);
+      setShowSettingsDropdown(false);
+    }
+  }, [user]);
 
   if (isLoading) {
     return (
@@ -63,13 +78,50 @@ export default function App() {
           />
         </nav>
 
-        {/* Settings */}
-        <button
-          className="p-2 hover:bg-glass backdrop-blur-sm rounded-xl transition-all shadow-glass-sm"
-          title="Settings"
-        >
-          <SettingsIcon className="w-5 h-5 text-text-tertiary" />
-        </button>
+        {/* Sign In Button or Profile Picture */}
+        <div className="relative">
+          {!user ? (
+            // Sign In Button for non-authenticated users
+            <button
+              onClick={() => {
+                setSettingsTab('account');
+                setShowSettingsModal(true);
+              }}
+              className="px-4 py-2 bg-accent-orange hover:bg-accent-orange-dark text-white text-sm font-medium rounded-xl transition-all shadow-sm"
+            >
+              Sign In
+            </button>
+          ) : (
+            // Profile Picture for authenticated users
+            <>
+              <button
+                onClick={() => setShowSettingsDropdown(!showSettingsDropdown)}
+                className="w-9 h-9 rounded-full bg-accent-orange/10 backdrop-blur-sm flex items-center justify-center ring-2 ring-accent-orange/30 hover:ring-accent-orange/50 transition-all"
+                title="Profile & Settings"
+              >
+                {user.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.name || user.email}
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="text-sm font-medium text-accent-orange">
+                    {(user.name || user.email)[0].toUpperCase()}
+                  </span>
+                )}
+              </button>
+              <SettingsDropdown
+                isOpen={showSettingsDropdown}
+                onClose={() => setShowSettingsDropdown(false)}
+                onSelectTab={(tab) => {
+                  setSettingsTab(tab);
+                  setShowSettingsModal(true);
+                }}
+              />
+            </>
+          )}
+        </div>
       </header>
 
       {/* Content - Both components stay mounted to preserve state */}
@@ -97,8 +149,37 @@ export default function App() {
           <PlaceholderScreen title="Saved Products" description="Your saved products will appear here" />
         </div>
       </div>
+
+      {/* Settings Modal - Using portal to render at body level */}
+      {showSettingsModal && createPortal(
+        <div className="fixed inset-0 z-[999999]" style={{ isolation: 'isolate' }}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setShowSettingsModal(false)} />
+          <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
+            <div className="relative w-full max-w-3xl max-h-[90vh] bg-background-primary rounded-2xl shadow-2xl overflow-hidden animate-slide-up pointer-events-auto">
+              {/* Close Button */}
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="absolute top-4 right-4 z-10 p-2 bg-glass backdrop-blur-sm hover:bg-glass-dark rounded-xl transition-all shadow-glass-sm"
+              >
+                <svg className="w-5 h-5 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+              {/* Settings Page with initial tab */}
+              <SettingsPageWrapper initialTab={settingsTab} />
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
+}
+
+// Wrapper to pass initial tab to SettingsPage
+function SettingsPageWrapper({ initialTab }: { initialTab: SettingsTab }) {
+  return <SettingsPage initialTab={initialTab} />;
 }
 
 function NavButton({
@@ -176,25 +257,3 @@ function TrendingIcon({ className }: { className?: string }) {
   );
 }
 
-function SettingsIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-      />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-      />
-    </svg>
-  );
-}

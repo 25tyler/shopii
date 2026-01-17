@@ -417,14 +417,14 @@ class ApiClient {
     }>('/api/billing/plans');
   }
 
-  async createCheckout() {
+  async createCheckoutSession() {
     return this.request<{
       checkoutUrl: string;
       sessionId: string;
     }>('/api/billing/checkout', { method: 'POST' });
   }
 
-  async createPortal() {
+  async createPortalSession() {
     return this.request<{
       portalUrl: string;
     }>('/api/billing/portal', { method: 'POST' });
