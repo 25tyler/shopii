@@ -124,9 +124,17 @@ Return only valid JSON arrays. No markdown formatting.`,
 
     const products = JSON.parse(jsonContent);
 
+    // Log what we got before filtering
+    console.log(
+      'Extracted products before filtering:',
+      products.map((p: any) => ({ name: p.name, confidence: p.confidenceScore }))
+    );
+
     // Filter out low confidence products and enrich with affiliate URLs
-    return products
-      .filter((p: any) => (p.confidenceScore || 0) >= 60)
+    const filtered = products.filter((p: any) => (p.confidenceScore || 0) >= 60);
+    console.log(`Filtered from ${products.length} to ${filtered.length} products (threshold: 60)`);
+
+    return filtered
       .map((p: any) => ({
         name: p.name || 'Unknown Product',
         brand: p.brand || '',

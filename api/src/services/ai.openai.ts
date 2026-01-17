@@ -269,16 +269,57 @@ Is there something in these categories I can help you find?`;
   return `I'm still building my ${category} database. In the meantime, I can help with other tech products like laptops, keyboards, or monitors. What else are you looking for?`;
 }
 
+// Product info for response generation
+interface ExtractedProductInfo {
+  name: string;
+  brand: string;
+  whyRecommended: string;
+  pros: string[];
+  cons: string[];
+  confidenceScore: number;
+  endorsementQuotes: string[];
+}
+
 // Generate response using real-time research from Reddit/forums
 export async function generateResearchBasedResponse(
   message: string,
   context: ChatContext,
-  researchContext: string
+  _researchContext: string, // Kept for API compatibility, products are pre-extracted
+  extractedProducts: ExtractedProductInfo[] = []
 ): Promise<string> {
   const userContext = buildUserContext(context);
 
+  // Build a product-focused system prompt
+  let systemPrompt = SYSTEM_PROMPT;
+
+  // If we have extracted products, tell the AI to ONLY discuss those
+  if (extractedProducts.length > 0) {
+    const productList = extractedProducts.map((p, i) =>
+      `${i + 1}. **${p.brand} ${p.name}** (Confidence: ${p.confidenceScore}%)
+   - Why: ${p.whyRecommended}
+   - Quotes: ${p.endorsementQuotes.slice(0, 2).map(q => `"${q}"`).join(', ')}
+   - Pros: ${p.pros.join(', ')}
+   - Cons: ${p.cons.join(', ')}`
+    ).join('\n\n');
+
+    systemPrompt += `
+
+CRITICAL: You MUST ONLY discuss these ${extractedProducts.length} products that we have verified data for. Do NOT mention any other products.
+
+VERIFIED PRODUCTS TO DISCUSS:
+${productList}
+
+Write a helpful response that:
+1. Briefly introduces the recommendations (1 sentence)
+2. For each product, explain WHY it's recommended using the quotes and reasoning provided
+3. Keep it concise - the product cards will show the full details
+4. End with a follow-up question
+
+Do NOT list products that aren't in the verified list above.`;
+  }
+
   const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: systemPrompt },
   ];
 
   // Add conversation history
@@ -290,20 +331,16 @@ export async function generateResearchBasedResponse(
     });
   }
 
-  // Add research context and user message
-  const fullMessage = `${message}${userContext}
-
-${researchContext}`;
-
+  // Add user message (without the raw research context since products are pre-extracted)
   messages.push({
     role: 'user',
-    content: fullMessage,
+    content: `${message}${userContext}`,
   });
 
   try {
     const response = await getOpenAI().chat.completions.create({
       model: 'gpt-4o-mini',
-      max_tokens: 1500,
+      max_tokens: 1000, // Shorter since we just need a summary
       messages: messages,
     });
 

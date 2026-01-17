@@ -124,7 +124,7 @@ export async function devChatRoutes(fastify: FastifyInstance) {
           extractedProducts = await fetchProductImages(extractedProducts);
           fastify.log.info(`Fetched images for products`);
 
-          // Generate response based on real research data
+          // Generate response based on extracted products (so AI only discusses products we have cards for)
           aiResponse = await generateResearchBasedResponse(
             message,
             {
@@ -132,7 +132,16 @@ export async function devChatRoutes(fastify: FastifyInstance) {
               pageContext: pageContext || null,
               conversationHistory,
             },
-            research.context
+            research.context,
+            extractedProducts.map((p) => ({
+              name: p.name,
+              brand: p.brand,
+              whyRecommended: p.whyRecommended,
+              pros: p.pros,
+              cons: p.cons,
+              confidenceScore: p.confidenceScore,
+              endorsementQuotes: p.endorsementQuotes,
+            }))
           );
         } catch (error: any) {
           fastify.log.error(`Research failed: ${error?.message}`);
