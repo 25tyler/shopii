@@ -297,11 +297,15 @@ async function main() {
   console.log('🌱 Seeding development database...\n');
 
   // Create dev user if not exists
-  const existingUser = await prisma.user.findUnique({
+  const existingUserById = await prisma.user.findUnique({
     where: { id: DEV_USER_ID },
   });
 
-  if (!existingUser) {
+  const existingUserByEmail = await prisma.user.findUnique({
+    where: { email: 'dev@shopii.test' },
+  });
+
+  if (!existingUserById && !existingUserByEmail) {
     await prisma.user.create({
       data: {
         id: DEV_USER_ID,
@@ -322,6 +326,8 @@ async function main() {
       },
     });
     console.log('✅ Created dev user');
+  } else if (existingUserByEmail && !existingUserById) {
+    console.log('⚠️  Dev user already exists with email dev@shopii.test but different ID');
   } else {
     console.log('✅ Dev user already exists');
   }

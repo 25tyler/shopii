@@ -18,32 +18,46 @@ declare module 'fastify' {
 
 // Create or get the development user
 async function getOrCreateDevUser(): Promise<User> {
+  // Try to find by ID first
   let user = await prisma.user.findUnique({
     where: { id: DEV_USER_ID },
   });
 
-  if (!user) {
-    user = await prisma.user.create({
-      data: {
-        id: DEV_USER_ID,
-        email: DEV_USER_EMAIL,
-        name: 'Dev User',
-        plan: 'pro', // Pro in dev mode for unlimited testing
-        preferences: {
-          create: {
-            categories: formatArray(['electronics', 'audio', 'computing']) as any,
-            budgetMin: 0,
-            budgetMax: 2000,
-            currency: 'USD',
-            qualityPreference: 'mid-range',
-            brandPreferences: formatArray([]) as any,
-            brandExclusions: formatArray([]) as any,
-          },
+  if (user) {
+    return user;
+  }
+
+  // Try to find by email (in case ID changed)
+  user = await prisma.user.findUnique({
+    where: { email: DEV_USER_EMAIL },
+  });
+
+  if (user) {
+    console.log('Using existing dev user with email:', DEV_USER_EMAIL);
+    return user;
+  }
+
+  // Create new user if neither ID nor email exists
+  user = await prisma.user.create({
+    data: {
+      id: DEV_USER_ID,
+      email: DEV_USER_EMAIL,
+      name: 'Dev User',
+      plan: 'pro', // Pro in dev mode for unlimited testing
+      preferences: {
+        create: {
+          categories: formatArray(['electronics', 'audio', 'computing']) as any,
+          budgetMin: 0,
+          budgetMax: 2000,
+          currency: 'USD',
+          qualityPreference: 'mid-range',
+          brandPreferences: formatArray([]) as any,
+          brandExclusions: formatArray([]) as any,
         },
       },
-    });
-    console.log('Created development user:', DEV_USER_EMAIL);
-  }
+    },
+  });
+  console.log('Created development user:', DEV_USER_EMAIL);
 
   return user;
 }

@@ -14,7 +14,7 @@ export function MessageList({ messages }: MessageListProps) {
         <div key={message.id} className="animate-fade-in">
           <MessageBubble message={message} />
           {message.products && message.products.length > 0 && (
-            <div className="mt-3 ml-10">
+            <div className="mt-3 px-5">
               <ProductCarousel products={message.products} />
             </div>
           )}
