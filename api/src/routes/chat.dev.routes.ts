@@ -462,7 +462,6 @@ export async function devChatRoutes(fastify: FastifyInstance) {
               enrichProducts(extractedProducts.map((p) => ({ name: p.name, brand: p.brand }))),
             ]);
             extractedProducts = await enhanceProductsWithEnrichment(extractedProducts, enrichmentMap);
-            extractedProducts = await fetchProductImages(extractedProducts);
 
             // Cache products
             cacheProducts(extractedProducts).catch((err) => {
@@ -549,59 +548,61 @@ export async function devChatRoutes(fastify: FastifyInstance) {
           });
         }
 
-        // Get product URLs
+        // Look up actual product URLs with AI verification, scraping price and images
+        // Only include products where we successfully find verified URLs
         const productsWithUrls = await Promise.all(
           extractedProducts.map(async (p) => {
-            let affiliateUrl = '';
-            let retailer = p.retailer || 'Store';
-
             try {
-              const urlInfo = await getPurchaseUrl(p.name, p.brand, p.retailer, p.affiliateUrl);
-              if (urlInfo && urlInfo.url) {
-                affiliateUrl = urlInfo.url;
-                retailer = urlInfo.retailer;
-              } else {
-                const searchTerm = p.brand ? `${p.brand} ${p.name}` : p.name;
-                affiliateUrl = `https://www.amazon.com/s?k=${encodeURIComponent(searchTerm)}&tag=shopii-20`;
-                retailer = 'Amazon';
-              }
-            } catch (error) {
-              const searchTerm = p.brand ? `${p.brand} ${p.name}` : p.name;
-              affiliateUrl = `https://www.amazon.com/s?k=${encodeURIComponent(searchTerm)}&tag=shopii-20`;
-              retailer = 'Amazon';
-            }
+              const urlInfo = await lookupProductUrl(p.name, p.brand);
 
-            return {
-              id: `${p.brand}-${p.name}`.toLowerCase().replace(/\s+/g, '-'),
-              name: p.name,
-              brand: p.brand,
-              description: p.description || '',
-              imageUrl: p.imageUrl || '',
-              price: {
-                amount: parsePrice(p.estimatedPrice),
-                currency: 'USD',
-              },
-              pros: p.pros || [],
-              cons: p.cons || [],
-              affiliateUrl,
-              retailer,
-              sourcesCount: p.sourcesCount || 1,
-              aiRating: p.qualityScore || 75,
-              confidence: (p.matchScore || 75) / 100,
-              matchScore: p.matchScore || 75,
-              endorsementStrength: p.endorsementStrength || 'moderate',
-              endorsementQuotes: p.endorsementQuotes || [],
-              sourceTypes: p.sourceTypes || [],
-              isSponsored: false,
-            };
+              if (urlInfo) {
+                // Successfully found and verified product page with price and images
+                return {
+                  id: `${p.brand}-${p.name}`.toLowerCase().replace(/\s+/g, '-'),
+                  name: p.name,
+                  brand: p.brand,
+                  description: p.description || '',
+                  imageUrl: urlInfo.images[0] || '', // Primary image
+                  imageUrls: urlInfo.images, // All images (3-5)
+                  price: {
+                    amount: parsePrice(urlInfo.price),
+                    currency: 'USD',
+                  },
+                  pros: p.pros || [],
+                  cons: p.cons || [],
+                  affiliateUrl: urlInfo.url,
+                  retailer: urlInfo.retailer,
+                  sourcesCount: p.sourcesCount || 1,
+                  aiRating: p.qualityScore || 75,
+                  confidence: (p.matchScore || 75) / 100,
+                  matchScore: p.matchScore || 75,
+                  endorsementStrength: p.endorsementStrength || 'moderate',
+                  endorsementQuotes: p.endorsementQuotes || [],
+                  sourceTypes: p.sourceTypes || [],
+                  isSponsored: false,
+                };
+              } else {
+                // No valid URL found - don't include this product
+                fastify.log.info(`[Chat SSE] No verified URL found for ${p.name}, excluding from results`);
+                return null;
+              }
+            } catch (error: any) {
+              fastify.log.warn(`[Chat SSE] URL lookup failed for ${p.name}: ${error?.message || error}`);
+              return null;
+            }
           })
         );
+
+        // Filter out products without URLs
+        const validProducts = productsWithUrls.filter((p): p is NonNullable<typeof p> => p !== null);
+
+        fastify.log.info(`[Chat SSE] Returning ${validProducts.length} products (excluded ${productsWithUrls.length - validProducts.length} without valid URLs)`);
 
         // Send final message
         sendEvent('message', { message: aiResponse });
 
         // Send products
-        sendEvent('products', { products: productsWithUrls });
+        sendEvent('products', { products: validProducts });
 
         // Send conversation ID
         sendEvent('conversationId', { conversationId: conversation.id });

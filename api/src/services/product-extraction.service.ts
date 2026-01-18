@@ -2,6 +2,7 @@
 import OpenAI from 'openai';
 import { tavily } from '@tavily/core';
 import { scrapeProductPage } from './web-scraper.service.js';
+import FirecrawlApp from '@mendable/firecrawl-js';
 
 // Google Custom Search API config
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
@@ -9,6 +10,7 @@ const GOOGLE_CX = process.env.GOOGLE_CX; // Custom Search Engine ID
 
 let _openai: OpenAI | null = null;
 let _tavily: ReturnType<typeof tavily> | null = null;
+let _firecrawl: FirecrawlApp | null = null;
 
 function getOpenAI(): OpenAI {
   if (!_openai) {
@@ -22,6 +24,16 @@ function getTavily() {
     _tavily = tavily({ apiKey: process.env.TAVILY_API_KEY! });
   }
   return _tavily;
+}
+
+function getFirecrawl(): FirecrawlApp | null {
+  if (!process.env.FIRECRAWL_API_KEY) {
+    return null; // Firecrawl is optional
+  }
+  if (!_firecrawl) {
+    _firecrawl = new FirecrawlApp({ apiKey: process.env.FIRECRAWL_API_KEY });
+  }
+  return _firecrawl;
 }
 
 export interface ExtractedProduct {
@@ -136,6 +148,180 @@ function getRetailerFromUrl(url: string): string {
   } catch {
     return 'Store';
   }
+}
+
+// Extract price from text content (Tavily result or page content)
+// Very conservative - only returns prices we're confident about
+// Prices should come from actual product pages, not random numbers in content
+function extractPriceFromContent(content: string, productName: string): string | null {
+  if (!content) return null;
+
+  // Look for prices explicitly labeled as "price", "cost", "$X.XX" near product-related context
+  // We want to avoid picking up random numbers like shipping costs, ratings, counts, etc.
+
+  // Priority 1: Look for explicitly labeled current prices (most reliable)
+  const labeledPricePatterns = [
+    /(?:current\s+price|price|our\s+price|sale\s+price|now)[:\s"]*\$(\d{1,4}(?:\.\d{2})?)\b/gi,
+    /\$(\d{1,4}(?:\.\d{2})?)\s*(?:USD|usd)?(?:\s*-\s*|\s+)(?:free\s+shipping|in\s+stock|add\s+to\s+cart)/gi,
+    /"price"\s*:\s*"?\$(\d{1,4}(?:\.\d{2})?)["\/]?/gi, // JSON format: "price":"$40.00" or "$24/60"
+    /\$(\d{1,4}(?:\.\d{2})?)[\/\s](?:\d+\s+)?(?:capsule|capsules|tablet|tablets|serving|servings|count|ct|oz|lb|ea|each)/gi, // "$24/60 Capsules" or "$5/bottle"
+  ];
+
+  for (const pattern of labeledPricePatterns) {
+    let match;
+    while ((match = pattern.exec(content)) !== null) {
+      // Remove potential trailing slash (e.g., "$24/" → "$24")
+      const priceStr = match[1].replace(/\/$/, '');
+      const price = parseFloat(priceStr);
+      // Filter for reasonable consumer product prices
+      if (price >= 4.99 && price <= 3000) {
+        console.log(`[PriceExtract] Found labeled price: $${price.toFixed(2)}`);
+        return `$${price.toFixed(2)}`;
+      }
+    }
+  }
+
+  // Priority 2: If we find multiple prices with .99 or .95 endings (common retail pricing)
+  // these are more likely to be actual product prices
+  const retailPricePattern = /\$(\d{1,4}\.(?:99|95|49|00))\b/g;
+  const retailPrices: number[] = [];
+  let match;
+
+  while ((match = retailPricePattern.exec(content)) !== null) {
+    const price = parseFloat(match[1]);
+    if (price >= 4.99 && price <= 3000) {
+      retailPrices.push(price);
+    }
+  }
+
+  // If we found retail-formatted prices, use them
+  // Prefer prices that appear multiple times (more confident), but accept single occurrences too
+  if (retailPrices.length > 0) {
+    // Find the most common price
+    const priceCount = new Map<number, number>();
+    for (const price of retailPrices) {
+      priceCount.set(price, (priceCount.get(price) || 0) + 1);
+    }
+
+    let bestPrice = retailPrices[0];
+    let maxCount = 0;
+    for (const [price, count] of priceCount) {
+      if (count > maxCount) {
+        maxCount = count;
+        bestPrice = price;
+      }
+    }
+
+    console.log(`[PriceExtract] Found ${retailPrices.length} retail prices, using: $${bestPrice} (${maxCount}x occurrences)`);
+    return `$${bestPrice.toFixed(2)}`;
+  }
+
+  // No reliable price found - better to show "Price varies" than a wrong price
+  return null;
+}
+
+// Check if URL is from a major retailer where we can reliably extract prices
+function isRetailProductPage(url: string): boolean {
+  const urlLower = url.toLowerCase();
+  const retailDomains = [
+    'amazon.com',
+    'bestbuy.com',
+    'walmart.com',
+    'target.com',
+    'costco.com',
+    'newegg.com',
+    'bhphotovideo.com',
+    'adorama.com',
+  ];
+  return retailDomains.some(domain => urlLower.includes(domain));
+}
+
+// Fetch price using Firecrawl (handles JavaScript-rendered content)
+async function fetchPriceWithFirecrawl(
+  url: string,
+  productName: string
+): Promise<string | null> {
+  const firecrawl = getFirecrawl();
+  if (!firecrawl) {
+    return null; // Firecrawl not configured
+  }
+
+  try {
+    console.log(`[Firecrawl] Scraping ${url} for ${productName}`);
+
+    const result = await firecrawl.scrape(url, {
+      formats: ['markdown'],
+      onlyMainContent: true,
+      waitFor: 3000, // Wait 3 seconds for dynamic content to load
+    });
+
+    // Check if we got markdown content
+    if (!result || !result.markdown) {
+      console.log(`[Firecrawl] Failed to scrape ${url} - no markdown returned`);
+      console.log(`[Firecrawl] Result:`, JSON.stringify(result, null, 2).slice(0, 500));
+      return null;
+    }
+
+    console.log(`[Firecrawl] Got ${result.markdown.length} chars of markdown`);
+
+    // Extract price from the markdown content
+    const price = extractPriceFromContent(result.markdown, productName);
+
+    if (price) {
+      console.log(`[Firecrawl] Found price ${price} from ${url}`);
+    } else {
+      console.log(`[Firecrawl] No price found in markdown from ${url}`);
+    }
+
+    return price;
+  } catch (error: any) {
+    console.error(`[Firecrawl] Error scraping ${url}:`, error.message);
+    return null;
+  }
+}
+
+// Fetch actual price from a product page URL with 2-tier fallback
+// Tier 1: Tavily extract (fast, free) - works for static HTML
+// Tier 2: Firecrawl (handles JS, cheap) - works for dynamic content
+async function fetchPriceFromProductPage(url: string, productName: string): Promise<string | null> {
+  // Tier 1: Try Tavily extract first (fastest, free)
+  try {
+    const client = getTavily();
+
+    // Use Tavily extract to get structured content from the product page
+    const response = await client.extract([url], {
+      includeImages: false,
+    });
+
+    if (response.results && response.results.length > 0) {
+      const content = response.results[0].rawContent || '';
+      console.log(`[Tavily] Extracted ${content.length} chars from ${url}`);
+
+      // Try to extract price from the static content
+      const price = extractPriceFromContent(content, productName);
+      if (price) {
+        console.log(`[Tavily] ✓ Got price ${price} from page: ${url}`);
+        return price;
+      } else {
+        console.log(`[Tavily] No price in static content, trying Firecrawl...`);
+      }
+    } else {
+      console.log(`[Tavily] No results from extract, trying Firecrawl...`);
+    }
+  } catch (error) {
+    console.log(`[Tavily] Extract failed, trying Firecrawl...`);
+  }
+
+  // Tier 2: Try Firecrawl (handles JavaScript-rendered prices)
+  const firecrawlPrice = await fetchPriceWithFirecrawl(url, productName);
+  if (firecrawlPrice) {
+    console.log(`[Firecrawl] ✓ Got price ${firecrawlPrice} from page: ${url}`);
+    return firecrawlPrice;
+  }
+
+  // No price found with either method
+  console.log(`[PriceExtract] ✗ No price found for ${url} with any method`);
+  return null;
 }
 
 // AI verification to check if a webpage matches the expected product
@@ -616,6 +802,7 @@ export async function enhanceProductsWithEnrichment(
 }
 
 // Enhance a single product with additional context
+// NOTE: This function does NOT handle prices - prices are extracted from actual product pages
 async function enhanceSingleProduct(
   product: ExtractedProduct,
   enrichmentContext: string
@@ -651,7 +838,7 @@ Return a JSON object with these 3 fields only. No markdown. DO NOT include price
         {
           role: 'system',
           content:
-            'You are a product database analyst. Write QUERY-AGNOSTIC descriptions that work regardless of how someone found this product. Be specific and avoid generic descriptions.',
+            'You are a product database analyst. Write QUERY-AGNOSTIC descriptions that work regardless of how someone found this product. Be specific and avoid generic descriptions. Do NOT include prices - those come from the actual product pages.',
         },
         { role: 'user', content: prompt },
       ],
@@ -667,6 +854,7 @@ Return a JSON object with these 3 fields only. No markdown. DO NOT include price
 
     const enhanced = JSON.parse(jsonContent);
 
+    // Do NOT use enhanced.estimatedPrice - prices come from actual product pages only
     return {
       ...product,
       description: enhanced.description || product.description,
