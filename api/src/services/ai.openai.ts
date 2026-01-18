@@ -540,6 +540,61 @@ function getDefaultSearchStrategy(query: string): SearchStrategy {
   };
 }
 
+// Fast response generation for Ask mode (no product research)
+export async function generateFastResponse(
+  query: string,
+  context: ChatContext
+): Promise<string> {
+  const userContext = buildUserContext(context);
+
+  const systemPrompt = `You are Shopii, a helpful shopping assistant. Answer questions quickly and conversationally.
+
+For general questions about products, tech, or shopping - provide concise, helpful answers.
+Do NOT recommend specific products unless explicitly asked - that's what Search mode is for.
+
+Keep responses under 150 words.
+Be friendly and helpful.
+If the question could benefit from product research, gently suggest they try Search mode.`;
+
+  const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+    { role: 'system', content: systemPrompt },
+  ];
+
+  // Add conversation history
+  const recentHistory = context.conversationHistory.slice(-10);
+  for (const msg of recentHistory) {
+    messages.push({
+      role: msg.role,
+      content: msg.content,
+    });
+  }
+
+  // Add current message
+  messages.push({
+    role: 'user',
+    content: `${query}${userContext}`,
+  });
+
+  try {
+    const response = await getOpenAI().chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages,
+      max_tokens: 300,
+      temperature: 0.7,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (content) {
+      return content;
+    }
+
+    return "I'm having trouble generating a response. Please try again.";
+  } catch (error: any) {
+    console.error('OpenAI API error in generateFastResponse:', error?.message || error);
+    return "I encountered an error. Please try again.";
+  }
+}
+
 export async function generateProductSummary(
   productName: string,
   reviews: Array<{ content: string; source: string; sentiment?: number }>

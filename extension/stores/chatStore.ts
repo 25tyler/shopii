@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Message, Conversation, ProductCard, ResearchProgressEvent, ResearchSource } from '../types';
+import { Message, Conversation, ProductCard, ResearchProgressEvent, ResearchSource, ChatMode, ComparisonData } from '../types';
 import { api } from '../services/api';
 
 interface ChatState {
@@ -15,9 +15,13 @@ interface ChatState {
     imageUrl?: string;
     retailer?: string;
   } | null;
+  selectedMode: ChatMode;
+  selectedProductsForComparison: string[];
 
   // Actions
-  sendMessage: (content: string, maxBudget?: number) => Promise<void>;
+  sendMessage: (content: string, mode?: ChatMode, selectedProducts?: string[]) => Promise<void>;
+  setSelectedMode: (mode: ChatMode) => void;
+  setSelectedProductsForComparison: (products: string[]) => void;
   createConversation: () => string;
   setActiveConversation: (id: string | null) => void;
   deleteConversation: (id: string) => void;
@@ -33,8 +37,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isLoading: false,
   error: null,
   pageContext: null,
+  selectedMode: 'auto' as ChatMode,
+  selectedProductsForComparison: [],
 
-  sendMessage: async (content: string, maxBudget?: number) => {
+  sendMessage: async (content: string, mode?: ChatMode, selectedProducts?: string[]) => {
     const state = get();
     let conversationId = state.activeConversationId;
 
@@ -110,7 +116,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           message: content,
           conversationId: conversationId !== state.activeConversationId ? undefined : conversationId,
           pageContext: state.pageContext || undefined,
-          maxBudget,
+          mode: mode || state.selectedMode || 'auto',
+          selectedProducts: selectedProducts || state.selectedProductsForComparison || undefined,
         }),
       });
 
@@ -126,6 +133,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       let finalProducts: ProductCard[] = [];
       let finalConversationId = conversationId;
       let researchSummary: { totalSearches: number; totalSources: number } | undefined = undefined;
+      let finalMode: ChatMode | undefined = undefined;
+      let comparisonData: ComparisonData | undefined = undefined;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -196,6 +205,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
               }));
             } else if (eventType === 'conversationId') {
               finalConversationId = data.conversationId || conversationId;
+            } else if (eventType === 'mode_selected') {
+              // Auto mode detected which mode to use
+              finalMode = data.mode;
+              console.log('[ChatStore SSE] Auto mode selected:', data.mode);
+            } else if (eventType === 'mode') {
+              // Mode used for this response
+              finalMode = data.mode;
+            } else if (eventType === 'comparison_data') {
+              // Comparison visualization data
+              comparisonData = data.comparisonData;
+              console.log('[ChatStore SSE] Comparison data received');
             } else if (eventType === 'error') {
               throw new Error(data.error);
             }
@@ -213,6 +233,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         content: finalMessage,
         timestamp: Date.now(),
         products: finalProducts.length > 0 ? finalProducts : undefined,
+        comparisonData,
+        mode: finalMode,
         researchSummary,
       };
 
@@ -305,6 +327,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  setSelectedMode: (mode: ChatMode) => {
+    set({ selectedMode: mode });
+  },
+
+  setSelectedProductsForComparison: (products: string[]) => {
+    set({ selectedProductsForComparison: products });
+  },
 
   initialize: async () => {
     try {

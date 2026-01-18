@@ -98,6 +98,53 @@ export interface PageContext {
   retailer?: string;
 }
 
+// Mode types
+export const ChatModeSchema = z.enum(['ask', 'search', 'comparison', 'auto']);
+export type ChatMode = z.infer<typeof ChatModeSchema>;
+
+// Comparison visualization types
+export interface SentimentChartData {
+  products: Array<{
+    name: string;
+    reddit: { positive: number; negative: number; neutral: number };
+    youtube: { positive: number; negative: number; neutral: number };
+    expertReviews: { positive: number; negative: number; neutral: number };
+  }>;
+}
+
+export interface FeatureMatrixData {
+  products: string[];
+  features: string[];
+  values: (string | number)[][];
+}
+
+export interface PriceComparisonData {
+  products: Array<{
+    name: string;
+    price: number;
+    retailer: string;
+  }>;
+}
+
+export interface MentionTrendsData {
+  products: Array<{
+    name: string;
+    totalMentions: number;
+    trends?: Array<{ month: string; count: number }>;
+  }>;
+}
+
+export interface ComparisonData {
+  products: string[];
+  visualizations: {
+    sentiment: SentimentChartData;
+    features: FeatureMatrixData;
+    prices: PriceComparisonData;
+    mentions: MentionTrendsData;
+  };
+  summary: string;
+}
+
 // API Request/Response types
 export const ChatMessageRequestSchema = z.object({
   message: z.string().min(1).max(2000),
@@ -112,7 +159,8 @@ export const ChatMessageRequestSchema = z.object({
       retailer: z.string().optional(),
     })
     .optional(),
-  maxBudget: z.number().min(0).optional(),
+  mode: ChatModeSchema.optional().default('auto'),
+  selectedProducts: z.array(z.string()).optional(),
 });
 
 export type ChatMessageRequest = z.infer<typeof ChatMessageRequestSchema>;

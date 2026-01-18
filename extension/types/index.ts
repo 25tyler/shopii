@@ -38,6 +38,52 @@ export interface ResearchProgressEvent {
   totalSources?: number;
 }
 
+// Mode types
+export type ChatMode = 'ask' | 'search' | 'comparison' | 'auto';
+
+// Comparison visualization types
+export interface SentimentChartData {
+  products: Array<{
+    name: string;
+    reddit: { positive: number; negative: number; neutral: number };
+    youtube: { positive: number; negative: number; neutral: number };
+    expertReviews: { positive: number; negative: number; neutral: number };
+  }>;
+}
+
+export interface FeatureMatrixData {
+  products: string[];
+  features: string[];
+  values: (string | number)[][];
+}
+
+export interface PriceComparisonData {
+  products: Array<{
+    name: string;
+    price: number;
+    retailer: string;
+  }>;
+}
+
+export interface MentionTrendsData {
+  products: Array<{
+    name: string;
+    totalMentions: number;
+    trends?: Array<{ month: string; count: number }>; // Optional temporal data
+  }>;
+}
+
+export interface ComparisonData {
+  products: string[];
+  visualizations: {
+    sentiment: SentimentChartData;
+    features: FeatureMatrixData;
+    prices: PriceComparisonData;
+    mentions: MentionTrendsData;
+  };
+  summary: string; // AI-generated comparison summary
+}
+
 // Chat types
 export interface Message {
   id: string;
@@ -45,6 +91,8 @@ export interface Message {
   content: string;
   timestamp: number;
   products?: ProductCard[];
+  comparisonData?: ComparisonData; // For comparison mode
+  mode?: ChatMode; // Which mode was used to generate this message
   isLoading?: boolean;
   researchSources?: ResearchSource[]; // For loading messages to show research progress
   researchSummary?: { totalSearches: number; totalSources: number }; // Summary shown after loading

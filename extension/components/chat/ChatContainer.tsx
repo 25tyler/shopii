@@ -6,6 +6,7 @@ import { ChatInput } from './ChatInput';
 import { WelcomeMessage } from './WelcomeMessage';
 import { SignupPrompt } from '../auth/SignupPrompt';
 import { AuthModal } from '../auth/AuthModal';
+import type { ChatMode } from '../../types';
 
 export function ChatContainer() {
   const { conversations, activeConversationId, isLoading, error, sendMessage, clearError, initialize } =
@@ -13,7 +14,6 @@ export function ChatContainer() {
   const { user, guestSearchesUsed, incrementGuestSearches } = useUserStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [maxBudget, setMaxBudget] = useState<number | null>(null);
 
   useEffect(() => {
     initialize();
@@ -27,12 +27,12 @@ export function ChatContainer() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, mode?: ChatMode) => {
     // Track guest searches
     if (!user) {
       incrementGuestSearches();
     }
-    await sendMessage(content, maxBudget ?? undefined);
+    await sendMessage(content, mode);
   };
 
   const searchesRemaining = user ? (user.plan === 'pro' ? '∞' : 'unlimited') : `${5 - guestSearchesUsed}`;
@@ -74,40 +74,6 @@ export function ChatContainer() {
           </p>
         </div>
       )}
-
-      {/* Budget Filter */}
-      <div className="mx-5 mb-3">
-        <div className="p-4 bg-glass backdrop-blur-sm rounded-2xl shadow-glass-sm">
-          <div className="flex items-center gap-3">
-            <label htmlFor="max-budget" className="text-sm font-medium text-text-primary flex-shrink-0">
-              Max Budget:
-            </label>
-            <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary">$</span>
-              <input
-                id="max-budget"
-                type="number"
-                value={maxBudget ?? ''}
-                onChange={(e) => setMaxBudget(e.target.value ? Number(e.target.value) : null)}
-                placeholder="No limit"
-                min={0}
-                className="w-full pl-7 pr-3 py-2 bg-background-secondary border border-border-light rounded-xl text-sm text-text-primary placeholder:text-text-quaternary focus:outline-none focus:border-accent-orange focus:ring-2 focus:ring-accent-orange/20 transition-all"
-              />
-            </div>
-            {maxBudget !== null && (
-              <button
-                onClick={() => setMaxBudget(null)}
-                className="flex-shrink-0 text-text-tertiary hover:text-text-primary transition-colors"
-                title="Clear budget filter"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* Input Area */}
       <div className="p-5 bg-glass backdrop-blur-lg">
