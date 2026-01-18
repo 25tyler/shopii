@@ -344,6 +344,296 @@ export async function devChatRoutes(fastify: FastifyInstance) {
     }
   );
 
+  // Send a message and get AI response with SSE streaming (for progress updates)
+  fastify.post(
+    '/message-stream',
+    {
+      preHandler: authMiddleware,
+    },
+    async (request, reply) => {
+      const parseResult = ChatMessageRequestSchema.safeParse(request.body);
+      if (!parseResult.success) {
+        return reply.status(400).send({
+          error: 'Bad Request',
+          message: 'Invalid request body',
+          details: parseResult.error.flatten().fieldErrors,
+        });
+      }
+
+      const { message, conversationId, pageContext } = parseResult.data;
+      const userId = request.userId!;
+
+      // Set SSE headers
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+      });
+
+      // Helper to send SSE events
+      const sendEvent = (eventType: string, data: any) => {
+        reply.raw.write(`event: ${eventType}\n`);
+        reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
+      };
+
+      try {
+        // Get or create conversation (same as /message endpoint)
+        let conversation;
+        if (conversationId) {
+          conversation = await prisma.conversation.findFirst({
+            where: {
+              id: conversationId,
+              userId,
+            },
+            include: {
+              messages: {
+                orderBy: { createdAt: 'asc' },
+                take: 20,
+              },
+            },
+          });
+        }
+
+        if (!conversation) {
+          conversation = await prisma.conversation.create({
+            data: {
+              userId,
+              title: message.slice(0, 50),
+              pageContext: pageContext ? (formatJson(pageContext) as any) : null,
+            },
+            include: {
+              messages: true,
+            },
+          });
+        }
+
+        // Get user preferences
+        const preferences = await prisma.userPreferences.findUnique({
+          where: { userId },
+        });
+
+        // Detect intent
+        const intent = await detectIntent(message);
+
+        // Build conversation history
+        const conversationHistory =
+          conversation.messages?.map((m) => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+          })) || [];
+
+        // Parse preferences
+        const parsedPreferences = preferences
+          ? {
+              userId: preferences.userId,
+              categories: parseArray(preferences.categories),
+              budgetMin: preferences.budgetMin,
+              budgetMax: preferences.budgetMax,
+              currency: preferences.currency,
+              qualityPreference: preferences.qualityPreference as any,
+              brandPreferences: parseArray(preferences.brandPreferences),
+              brandExclusions: parseArray(preferences.brandExclusions),
+            }
+          : null;
+
+        let aiResponse: string;
+        let extractedProducts: ExtractedProduct[] = [];
+        let researchSources: Array<{ title: string; url: string }> = [];
+
+        // For product searches, conduct real-time research with progress callbacks
+        if (intent.type === 'product_search' || intent.type === 'comparison') {
+          fastify.log.info(`Conducting research for: "${message}"`);
+
+          try {
+            // Check cached products
+            const cachedMatches = await searchCachedProducts(message, 5);
+            fastify.log.info(`Found ${cachedMatches.length} cached products matching query`);
+
+            // Search with progress callback
+            const progressCallback = (event: any) => {
+              sendEvent('progress', event);
+            };
+
+            const research = await conductProductResearch(message, progressCallback);
+            researchSources = research.sources.map((s) => ({ title: s.title, url: s.url }));
+
+            fastify.log.info(`Found ${research.sources.length} research sources`);
+
+            // Extract products from research
+            extractedProducts = await extractProductsFromResearch(message, research.context);
+            fastify.log.info(`Extracted ${extractedProducts.length} products`);
+
+            // Fallback to cached if needed
+            if (extractedProducts.length === 0 && cachedMatches.length > 0) {
+              const relevantCacheMatches = cachedMatches.filter((p) => p.matchScore >= 70);
+              if (relevantCacheMatches.length > 0) {
+                fastify.log.info(`Using ${relevantCacheMatches.length} cached products as fallback`);
+                extractedProducts = relevantCacheMatches;
+              }
+            }
+
+            // Enrichment
+            const [enrichmentMap] = await Promise.all([
+              enrichProducts(extractedProducts.map((p) => ({ name: p.name, brand: p.brand }))),
+            ]);
+            extractedProducts = await enhanceProductsWithEnrichment(extractedProducts, enrichmentMap);
+            extractedProducts = await fetchProductImages(extractedProducts);
+
+            // Cache products
+            cacheProducts(extractedProducts).catch((err) => {
+              fastify.log.error(`Failed to cache products: ${err.message}`);
+            });
+
+            // Generate response
+            aiResponse = await generateResearchBasedResponse(
+              message,
+              {
+                preferences: parsedPreferences,
+                pageContext: pageContext || null,
+                conversationHistory,
+              },
+              research.context,
+              extractedProducts.map((p) => ({
+                name: p.name,
+                brand: p.brand,
+                whyRecommended: p.description,
+                pros: p.pros,
+                cons: p.cons,
+                confidenceScore: p.qualityScore,
+                endorsementQuotes: p.endorsementQuotes,
+              }))
+            );
+          } catch (error: any) {
+            fastify.log.error(`Research failed: ${error?.message}`);
+            aiResponse = await generateChatResponse(
+              message,
+              {
+                preferences: parsedPreferences,
+                pageContext: pageContext || null,
+                conversationHistory,
+              },
+              []
+            );
+          }
+        } else {
+          // For general chat
+          aiResponse = await generateChatResponse(
+            message,
+            {
+              preferences: parsedPreferences,
+              pageContext: pageContext || null,
+              conversationHistory,
+            },
+            []
+          );
+        }
+
+        // Save messages
+        await prisma.message.createMany({
+          data: [
+            {
+              conversationId: conversation.id,
+              role: 'user',
+              content: message,
+              metadata: formatJson({ intent }) as any,
+            },
+            {
+              conversationId: conversation.id,
+              role: 'assistant',
+              content: aiResponse,
+              productsShown: formatArray(extractedProducts.map((p) => p.name)) as any,
+            },
+          ],
+        });
+
+        // Update conversation title
+        if (!conversation.messages || conversation.messages.length === 0) {
+          await prisma.conversation.update({
+            where: { id: conversation.id },
+            data: {
+              title: message.slice(0, 50) + (message.length > 50 ? '...' : ''),
+              updatedAt: new Date(),
+            },
+          });
+        }
+
+        // Learn from search
+        if (extractedProducts.length > 0) {
+          learnFromSearch(userId, message, extractedProducts).catch((err) => {
+            console.error('[Chat] Failed to learn from search:', err);
+          });
+        }
+
+        // Get product URLs
+        const productsWithUrls = await Promise.all(
+          extractedProducts.map(async (p) => {
+            let affiliateUrl = '';
+            let retailer = p.retailer || 'Store';
+
+            try {
+              const urlInfo = await getPurchaseUrl(p.name, p.brand, p.retailer, p.affiliateUrl);
+              if (urlInfo && urlInfo.url) {
+                affiliateUrl = urlInfo.url;
+                retailer = urlInfo.retailer;
+              } else {
+                const searchTerm = p.brand ? `${p.brand} ${p.name}` : p.name;
+                affiliateUrl = `https://www.amazon.com/s?k=${encodeURIComponent(searchTerm)}&tag=shopii-20`;
+                retailer = 'Amazon';
+              }
+            } catch (error) {
+              const searchTerm = p.brand ? `${p.brand} ${p.name}` : p.name;
+              affiliateUrl = `https://www.amazon.com/s?k=${encodeURIComponent(searchTerm)}&tag=shopii-20`;
+              retailer = 'Amazon';
+            }
+
+            return {
+              id: `${p.brand}-${p.name}`.toLowerCase().replace(/\s+/g, '-'),
+              name: p.name,
+              brand: p.brand,
+              description: p.description || '',
+              imageUrl: p.imageUrl || '',
+              price: {
+                amount: parsePrice(p.estimatedPrice),
+                currency: 'USD',
+              },
+              pros: p.pros || [],
+              cons: p.cons || [],
+              affiliateUrl,
+              retailer,
+              sourcesCount: p.sourcesCount || 1,
+              aiRating: p.qualityScore || 75,
+              confidence: (p.matchScore || 75) / 100,
+              matchScore: p.matchScore || 75,
+              endorsementStrength: p.endorsementStrength || 'moderate',
+              endorsementQuotes: p.endorsementQuotes || [],
+              sourceTypes: p.sourceTypes || [],
+              isSponsored: false,
+            };
+          })
+        );
+
+        // Send final message
+        sendEvent('message', { message: aiResponse });
+
+        // Send products
+        sendEvent('products', { products: productsWithUrls });
+
+        // Send conversation ID
+        sendEvent('conversationId', { conversationId: conversation.id });
+
+        // Signal completion
+        sendEvent('done', {});
+
+        reply.raw.end();
+      } catch (error: any) {
+        console.error('[SSE] Error:', error);
+        sendEvent('error', { error: error.message || 'Internal server error' });
+        reply.raw.end();
+      }
+    }
+  );
+
   // List user conversations
   fastify.get(
     '/conversations',

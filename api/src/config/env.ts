@@ -27,6 +27,9 @@ const envSchema = z.object({
   // Anthropic (Claude)
   ANTHROPIC_API_KEY: z.string().optional(),
 
+  // Google Gemini
+  GEMINI_API_KEY: z.string().optional(),
+
   // Stripe (optional - not needed for hackathon)
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
