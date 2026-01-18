@@ -62,9 +62,11 @@ export default function App() {
       <header className="h-14 px-5 bg-glass backdrop-blur-lg flex items-center justify-between flex-shrink-0 shadow-glass-sm">
         {/* Logo */}
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-xl bg-glass backdrop-blur-md flex items-center justify-center shadow-glass-sm">
-            <span className="text-accent-orange font-medium text-lg">S</span>
-          </div>
+          <img
+            src="/icon/48.png"
+            alt="Shopii"
+            className="w-7 h-7"
+          />
           <h1 className="text-base font-medium text-text-primary">Shopii</h1>
         </div>
 

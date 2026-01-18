@@ -9,6 +9,12 @@ interface ProductCardProps {
 
 export function ProductCardComponent({ product }: ProductCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  // Get all available images (use imageUrls if available, fallback to single imageUrl)
+  const images = product.imageUrls && product.imageUrls.length > 0
+    ? product.imageUrls
+    : product.imageUrl ? [product.imageUrl] : [];
 
   const handleBuyClick = async () => {
     // Track affiliate click via API
@@ -24,18 +30,66 @@ export function ProductCardComponent({ product }: ProductCardProps) {
     window.open(product.affiliateUrl, '_blank');
   };
 
+  const nextImage = () => {
+    setCurrentImageIndex((prev) => (prev + 1) % images.length);
+  };
+
+  const prevImage = () => {
+    setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
+  };
+
   return (
     <div className="bg-glass backdrop-blur-md rounded-3xl hover:shadow-glass transition-all overflow-hidden shadow-glass-sm">
       {/* Product Header */}
       <div className="p-4 flex gap-3">
-        {/* Image */}
-        <div className="w-24 h-24 bg-glass-dark backdrop-blur-sm rounded-2xl overflow-hidden flex-shrink-0">
-          {product.imageUrl ? (
-            <img
-              src={product.imageUrl}
-              alt={product.name}
-              className="w-full h-full object-cover"
-            />
+        {/* Image Carousel */}
+        <div className="w-24 h-24 bg-glass-dark backdrop-blur-sm rounded-2xl overflow-hidden flex-shrink-0 relative group">
+          {images.length > 0 ? (
+            <>
+              <img
+                src={images[currentImageIndex]}
+                alt={`${product.name} - Image ${currentImageIndex + 1}`}
+                className="w-full h-full object-cover transition-opacity duration-300"
+              />
+
+              {/* Navigation arrows - show on hover when multiple images */}
+              {images.length > 1 && (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      prevImage();
+                    }}
+                    className="absolute left-1 top-1/2 -translate-y-1/2 w-6 h-6 bg-black/50 hover:bg-black/70 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                    aria-label="Previous image"
+                  >
+                    <ChevronLeftIcon className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      nextImage();
+                    }}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 bg-black/50 hover:bg-black/70 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                    aria-label="Next image"
+                  >
+                    <ChevronRightIcon className="w-4 h-4" />
+                  </button>
+
+                  {/* Image dots indicator */}
+                  <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-1">
+                    {images.map((_, idx) => (
+                      <div
+                        key={idx}
+                        className={`w-1 h-1 rounded-full transition-all ${
+                          idx === currentImageIndex ? 'bg-white w-2' : 'bg-white/50'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
           ) : (
             <div className="w-full h-full flex items-center justify-center text-text-quaternary">
               <ImagePlaceholder className="w-10 h-10" />
@@ -114,19 +168,15 @@ export function ProductCardComponent({ product }: ProductCardProps) {
             </div>
           )}
 
-          {/* Rating Details */}
-          <div className="pt-3 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-text-tertiary">Quality Score</span>
-              <span className="font-medium text-text-primary">{product.aiRating}/100</span>
-            </div>
-            {product.matchScore !== undefined && (
+          {/* Match Score */}
+          {product.matchScore !== undefined && (
+            <div className="pt-3">
               <div className="flex justify-between text-sm">
                 <span className="text-text-tertiary">Match</span>
                 <span className="font-medium text-accent-orange">{product.matchScore}%</span>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -181,6 +231,22 @@ function ImagePlaceholder({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
     </svg>
   );
 }

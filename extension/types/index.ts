@@ -44,6 +44,7 @@ export interface ProductCard {
   name: string;
   description: string;
   imageUrl: string;
+  imageUrls?: string[]; // Multiple product images for carousel
   price: {
     amount: number | null; // null when price not known (shows "Price varies")
     currency: string;

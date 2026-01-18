@@ -1,0 +1,21 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Shopping bag shape with gradient -->
+  <defs>
+    <linearGradient id="bagGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#FDB950;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#F37335;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Outer bag shape -->
+  <path d="M 128 154 Q 128 100 180 100 L 332 100 Q 384 100 384 154 L 384 180 L 430 180 Q 460 180 460 210 L 460 432 Q 460 462 430 462 L 82 462 Q 52 462 52 432 L 52 210 Q 52 180 82 180 L 128 180 Z" fill="url(#bagGradient)" stroke="url(#bagGradient)" stroke-width="8"/>
+
+  <!-- Inner white background for S -->
+  <rect x="140" y="200" width="232" height="180" rx="24" fill="white"/>
+
+  <!-- Letter S with gradient -->
+  <path d="M 290 240 Q 330 240 330 265 Q 330 280 310 285 L 240 300 Q 200 310 200 340 Q 200 370 240 370 L 300 370 Q 320 370 320 360 M 320 360 L 350 360 Q 350 390 320 395 L 240 395 Q 180 395 180 340 Q 180 315 220 305 L 290 290 Q 310 285 310 270 Q 310 255 290 255 L 230 255 Q 210 255 210 265 M 210 265 L 180 265 Q 180 240 210 240 L 290 240" fill="url(#bagGradient)" stroke="none"/>
+
+  <!-- Handle (arc on top) -->
+  <path d="M 180 154 Q 180 80 256 80 Q 332 80 332 154" fill="none" stroke="url(#bagGradient)" stroke-width="32" stroke-linecap="round"/>
+</svg>

@@ -15,8 +15,12 @@ export function WelcomeMessage({ onSuggestionClick }: WelcomeMessageProps) {
   return (
     <div className="flex flex-col items-center justify-center h-full px-6 py-12">
       {/* Simple Icon/Logo */}
-      <div className="w-20 h-20 mb-6 rounded-3xl bg-glass backdrop-blur-md flex items-center justify-center shadow-glass">
-        <span className="text-4xl font-light text-accent-orange">S</span>
+      <div className="w-20 h-20 mb-6 flex items-center justify-center">
+        <img
+          src="/icon/128.png"
+          alt="Shopii"
+          className="w-full h-full"
+        />
       </div>
 
       {/* Heading */}

@@ -5,7 +5,7 @@ import { prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.dev.js';
 import { generateChatResponse, generateResearchBasedResponse, detectIntent } from '../services/ai.openai.js';
 import { conductProductResearch, enrichProducts } from '../services/research.service.js';
-import { extractProductsFromResearch, fetchProductImages, enhanceProductsWithEnrichment, ExtractedProduct, getPurchaseUrl } from '../services/product-extraction.service.js';
+import { extractProductsFromResearch, enhanceProductsWithEnrichment, ExtractedProduct, lookupProductUrl } from '../services/product-extraction.service.js';
 import { cacheProducts, searchCachedProducts } from '../services/product-cache.service.js';
 import { learnFromSearch } from '../services/preference-learning.service.js';
 import { formatArray, parseArray, formatJson, parseJson } from '../utils/db-helpers.js';
@@ -177,9 +177,7 @@ export async function devChatRoutes(fastify: FastifyInstance) {
           extractedProducts = await enhanceProductsWithEnrichment(extractedProducts, enrichmentMap);
           fastify.log.info(`Enhanced products with enrichment data`);
 
-          // Fetch product images
-          extractedProducts = await fetchProductImages(extractedProducts);
-          fastify.log.info(`Fetched images for products`);
+          // NOTE: Images will come from page scraping during URL lookup
 
           // Cache the extracted products for future queries (async, don't wait)
           cacheProducts(extractedProducts).catch((err) => {
@@ -269,73 +267,59 @@ export async function devChatRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Look up actual product URLs in parallel
-      // We try to find real product pages, but include products even if URL lookup fails
+      // Look up actual product URLs with AI verification, scraping price and images
+      // Only include products where we successfully find verified URLs
       const productsWithUrls = await Promise.all(
         extractedProducts.map(async (p) => {
-          // Try to get a real product URL
-          let affiliateUrl = '';
-          let retailer = p.retailer || 'Store';
-
           try {
-            const urlInfo = await getPurchaseUrl(
-              p.name,
-              p.brand,
-              p.retailer,
-              p.affiliateUrl // Use existing URL if it's a direct product link
-            );
+            const urlInfo = await lookupProductUrl(p.name, p.brand);
 
-            if (urlInfo && urlInfo.url) {
-              affiliateUrl = urlInfo.url;
-              retailer = urlInfo.retailer;
-              fastify.log.info(`[Chat] Found product URL for ${p.name}: ${affiliateUrl}`);
+            if (urlInfo) {
+              // Successfully found and verified product page with price and images
+              return {
+                id: `${p.brand}-${p.name}`.toLowerCase().replace(/\s+/g, '-'),
+                name: p.name,
+                brand: p.brand,
+                description: p.description || '',
+                imageUrl: urlInfo.images[0] || '', // Primary image
+                imageUrls: urlInfo.images, // All images (3-5)
+                price: {
+                  amount: parsePrice(urlInfo.price),
+                  currency: 'USD',
+                },
+                pros: p.pros || [],
+                cons: p.cons || [],
+                affiliateUrl: urlInfo.url,
+                retailer: urlInfo.retailer,
+                sourcesCount: p.sourcesCount || 1,
+                aiRating: p.qualityScore || 75,
+                confidence: (p.matchScore || 75) / 100,
+                matchScore: p.matchScore || 75,
+                endorsementStrength: p.endorsementStrength || 'moderate',
+                endorsementQuotes: p.endorsementQuotes || [],
+                sourceTypes: p.sourceTypes || [],
+                isSponsored: false,
+              };
             } else {
-              // Fallback: Amazon search URL with affiliate tag (better than nothing)
-              const searchTerm = p.brand ? `${p.brand} ${p.name}` : p.name;
-              affiliateUrl = `https://www.amazon.com/s?k=${encodeURIComponent(searchTerm)}&tag=shopii-20`;
-              retailer = 'Amazon';
-              fastify.log.info(`[Chat] Using Amazon search fallback for ${p.name}`);
+              // No valid URL found - don't include this product
+              fastify.log.info(`[Chat] No verified URL found for ${p.name}, excluding from results`);
+              return null;
             }
           } catch (error) {
-            // On error, use Amazon search fallback
-            const searchTerm = p.brand ? `${p.brand} ${p.name}` : p.name;
-            affiliateUrl = `https://www.amazon.com/s?k=${encodeURIComponent(searchTerm)}&tag=shopii-20`;
-            retailer = 'Amazon';
-            fastify.log.info(`[Chat] URL lookup failed for ${p.name}, using Amazon search fallback`);
+            fastify.log.warn(`[Chat] URL lookup failed for ${p.name}:`, error);
+            return null;
           }
-
-          return {
-            id: `${p.brand}-${p.name}`.toLowerCase().replace(/\s+/g, '-'),
-            name: p.name,
-            brand: p.brand,
-            description: p.description || '',
-            imageUrl: p.imageUrl || '',
-            price: {
-              amount: parsePrice(p.estimatedPrice),
-              currency: 'USD',
-            },
-            pros: p.pros || [],
-            cons: p.cons || [],
-            affiliateUrl,
-            retailer,
-            sourcesCount: p.sourcesCount || 1,
-            // Two separate ratings
-            aiRating: p.qualityScore || 75, // General product quality (cached)
-            confidence: (p.matchScore || 75) / 100, // Query match/relevance (per-search)
-            matchScore: p.matchScore || 75, // Explicit match score for sorting
-            endorsementStrength: p.endorsementStrength || 'moderate',
-            endorsementQuotes: p.endorsementQuotes || [],
-            sourceTypes: p.sourceTypes || [],
-            isSponsored: false,
-          };
         })
       );
 
-      fastify.log.info(`[Chat] Returning ${productsWithUrls.length} products`);
+      // Filter out products without URLs
+      const validProducts = productsWithUrls.filter((p): p is NonNullable<typeof p> => p !== null);
+
+      fastify.log.info(`[Chat] Returning ${validProducts.length} products (excluded ${productsWithUrls.length - validProducts.length} without valid URLs)`);
 
       return {
         message: aiResponse,
-        products: productsWithUrls,
+        products: validProducts,
         sources: researchSources.slice(0, 5),
         conversationId: conversation.id,
         _devMode: true,

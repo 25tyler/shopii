@@ -54,8 +54,12 @@ export function OnboardingFlow() {
       <div className="flex flex-col h-full px-8 py-12 bg-background-primary">
         <div className="flex-1 flex flex-col items-center justify-center">
           {/* Logo */}
-          <div className="w-24 h-24 rounded-2xl bg-glass backdrop-blur-md flex items-center justify-center mb-8 shadow-glass">
-            <span className="text-5xl font-light text-accent-orange">S</span>
+          <div className="w-24 h-24 mb-8 flex items-center justify-center">
+            <img
+              src="/icon/128.png"
+              alt="Shopii"
+              className="w-full h-full"
+            />
           </div>
 
           <h1 className="text-3xl font-light text-text-primary mb-4 text-center">Welcome to Shopii</h1>
