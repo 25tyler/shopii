@@ -164,4 +164,124 @@ export async function usersRoutes(fastify: FastifyInstance) {
       return { success: true };
     }
   );
+
+  // Get user's favorite products
+  fastify.get(
+    '/favorites',
+    {
+      preHandler: authMiddleware,
+    },
+    async (request) => {
+      const user = request.user!;
+
+      const favorites = await prisma.favoriteProduct.findMany({
+        where: { userId: user.id },
+        include: {
+          product: {
+            include: {
+              rating: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      return favorites;
+    }
+  );
+
+  // Add product to favorites
+  fastify.post(
+    '/favorites',
+    {
+      preHandler: authMiddleware,
+    },
+    async (request, reply) => {
+      const user = request.user!;
+
+      const bodySchema = z.object({
+        productId: z.string().uuid(),
+      });
+
+      const parseResult = bodySchema.safeParse(request.body);
+      if (!parseResult.success) {
+        return reply.status(400).send({
+          error: 'Bad Request',
+          message: 'Invalid request body',
+          details: parseResult.error.flatten().fieldErrors,
+        });
+      }
+
+      const { productId } = parseResult.data;
+
+      // Check if product exists
+      const product = await prisma.product.findUnique({
+        where: { id: productId },
+      });
+
+      if (!product) {
+        return reply.status(404).send({
+          error: 'Not Found',
+          message: 'Product not found',
+        });
+      }
+
+      // Check if already favorited
+      const existing = await prisma.favoriteProduct.findUnique({
+        where: {
+          userId_productId: {
+            userId: user.id,
+            productId,
+          },
+        },
+      });
+
+      if (existing) {
+        return { success: true, favorite: existing };
+      }
+
+      const favorite = await prisma.favoriteProduct.create({
+        data: {
+          userId: user.id,
+          productId,
+        },
+      });
+
+      return { success: true, favorite };
+    }
+  );
+
+  // Remove product from favorites
+  fastify.delete(
+    '/favorites/:productId',
+    {
+      preHandler: authMiddleware,
+    },
+    async (request, reply) => {
+      const user = request.user!;
+
+      const paramsSchema = z.object({
+        productId: z.string().uuid(),
+      });
+
+      const parseResult = paramsSchema.safeParse(request.params);
+      if (!parseResult.success) {
+        return reply.status(400).send({
+          error: 'Bad Request',
+          message: 'Invalid product ID',
+        });
+      }
+
+      const { productId } = parseResult.data;
+
+      await prisma.favoriteProduct.deleteMany({
+        where: {
+          userId: user.id,
+          productId,
+        },
+      });
+
+      return { success: true };
+    }
+  );
 }

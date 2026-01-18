@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ChatContainer } from '../../components/chat/ChatContainer';
 import { SuggestionsPage } from '../../components/suggestions/SuggestionsPage';
+import { FavoritesPage } from '../../components/favorites/FavoritesPage';
 import { OnboardingFlow } from '../../components/onboarding/OnboardingFlow';
 import { SettingsPage } from '../../components/settings/SettingsPage';
 import { useUserStore } from '../../stores/userStore';
@@ -144,13 +145,13 @@ export default function App() {
         >
           <SuggestionsPage />
         </div>
-        {/* Placeholder screen for saved */}
+        {/* Favorites page */}
         <div
           className={`absolute inset-0 transition-all duration-300 ease-out ${
             activeRoute === 'saved' ? 'opacity-100 visible translate-x-0' : 'opacity-0 invisible translate-x-4'
           }`}
         >
-          <PlaceholderScreen title="Saved Products" description="Your saved products will appear here" />
+          <FavoritesPage />
         </div>
       </div>
 

@@ -17,7 +17,7 @@ interface ChatState {
   } | null;
 
   // Actions
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, maxBudget?: number) => Promise<void>;
   createConversation: () => string;
   setActiveConversation: (id: string | null) => void;
   deleteConversation: (id: string) => void;
@@ -34,7 +34,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   error: null,
   pageContext: null,
 
-  sendMessage: async (content: string) => {
+  sendMessage: async (content: string, maxBudget?: number) => {
     const state = get();
     let conversationId = state.activeConversationId;
 
@@ -110,6 +110,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           message: content,
           conversationId: conversationId !== state.activeConversationId ? undefined : conversationId,
           pageContext: state.pageContext || undefined,
+          maxBudget,
         }),
       });
 

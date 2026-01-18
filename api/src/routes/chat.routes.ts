@@ -24,7 +24,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const { message, conversationId, pageContext } = parseResult.data;
+      const { message, conversationId, pageContext, maxBudget } = parseResult.data;
       const userId = request.userId;
 
       // Track usage if authenticated
@@ -76,8 +76,18 @@ export async function chatRoutes(fastify: FastifyInstance) {
       // Search for relevant products if it's a product search
       let products: any[] = [];
       if (intent.type === 'product_search' || intent.type === 'comparison') {
+        // Determine the effective budget (user input takes priority over preferences)
+        const effectiveBudgetMax = maxBudget ?? preferences?.budgetMax;
+
         // For now, return mock products - will be replaced with real search
         products = await prisma.product.findMany({
+          where: {
+            ...(effectiveBudgetMax && {
+              currentPrice: {
+                lte: effectiveBudgetMax,
+              },
+            }),
+          },
           take: 5,
           include: {
             rating: true,
@@ -203,7 +213,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const { message, conversationId, pageContext } = parseResult.data;
+      const { message, conversationId, pageContext, maxBudget } = parseResult.data;
       const userId = request.userId;
 
       // Set SSE headers
@@ -270,7 +280,17 @@ export async function chatRoutes(fastify: FastifyInstance) {
         // Search for relevant products if it's a product search
         let products: any[] = [];
         if (intent.type === 'product_search' || intent.type === 'comparison') {
+          // Determine the effective budget (user input takes priority over preferences)
+          const effectiveBudgetMax = maxBudget ?? preferences?.budgetMax;
+
           products = await prisma.product.findMany({
+            where: {
+              ...(effectiveBudgetMax && {
+                currentPrice: {
+                  lte: effectiveBudgetMax,
+                },
+              }),
+            },
             take: 5,
             include: {
               rating: true,

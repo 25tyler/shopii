@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { User, UserPreferences } from '../types';
 import { api } from '../services/api';
 import { signInWithGoogle as supabaseSignInWithGoogle, signOut as supabaseSignOut } from '../services/supabase';
+import { useFavoritesStore } from './favoritesStore';
 
 interface UserState {
   user: User | null;
@@ -101,6 +102,9 @@ export const useUserStore = create<UserState>((set, get) => ({
       // If user has auth token, fetch fresh user data
       if (result.authToken) {
         await get().fetchUserData();
+      } else {
+        // Load guest favorites from localStorage
+        await useFavoritesStore.getState().fetchFavorites(true);
       }
     } catch (error) {
       console.error('Failed to initialize user store:', error);
@@ -154,6 +158,15 @@ export const useUserStore = create<UserState>((set, get) => ({
         },
         userPreferences: preferences,
       });
+
+      // Sync guest favorites to account and fetch user favorites
+      try {
+        await useFavoritesStore.getState().syncGuestFavoritesToAccount();
+        await useFavoritesStore.getState().fetchFavorites(false);
+      } catch (favError) {
+        console.error('Failed to fetch favorites:', favError);
+        // Don't fail the whole login if favorites fetch fails
+      }
     } catch (error) {
       console.error('Failed to fetch user data:', error);
       // If fetch fails, clear auth (token might be expired)
@@ -289,6 +302,9 @@ export const useUserStore = create<UserState>((set, get) => ({
         'userPreferences',
         'isOnboarded',
       ]);
+
+      // Clear favorites
+      useFavoritesStore.getState().clearFavorites();
     }
   },
 }));

@@ -24,8 +24,6 @@ export function PreferencesSection() {
   const { user, preferences, guestPreferences, setPreferences, setGuestPreferences } = useUserStore();
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [qualityPreference, setQualityPreference] = useState<'budget' | 'mid-range' | 'premium'>('mid-range');
-  const [budgetMin, setBudgetMin] = useState(0);
-  const [budgetMax, setBudgetMax] = useState(500);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
 
@@ -35,8 +33,6 @@ export function PreferencesSection() {
     if (prefs) {
       setSelectedCategories(prefs.categories || []);
       setQualityPreference(prefs.qualityPreference || 'mid-range');
-      setBudgetMin(prefs.budgetRange?.min || 0);
-      setBudgetMax(prefs.budgetRange?.max || 500);
     }
   }, [user, preferences, guestPreferences]);
 
@@ -52,7 +48,7 @@ export function PreferencesSection() {
 
     const newPreferences: UserPreferences = {
       categories: selectedCategories,
-      budgetRange: { min: budgetMin, max: budgetMax, currency: 'USD' },
+      budgetRange: preferences?.budgetRange || guestPreferences?.budgetRange || { min: 0, max: 1000, currency: 'USD' },
       qualityPreference,
       brandPreferences: preferences?.brandPreferences || guestPreferences?.brandPreferences || [],
       brandExclusions: preferences?.brandExclusions || guestPreferences?.brandExclusions || [],
@@ -63,9 +59,6 @@ export function PreferencesSection() {
         // Update on backend
         await api.updatePreferences({
           categories: selectedCategories,
-          budgetMin,
-          budgetMax,
-          currency: 'USD',
           qualityPreference,
         });
         setPreferences(newPreferences);
@@ -136,72 +129,6 @@ export function PreferencesSection() {
               <p className="text-sm text-text-secondary">{option.description}</p>
             </button>
           ))}
-        </div>
-      </section>
-
-      {/* Budget Range */}
-      <section>
-        <div className="mb-4">
-          <h2 className="text-lg font-medium text-text-primary mb-1">Budget Range</h2>
-          <p className="text-sm text-text-secondary">
-            Typical price range for products you're looking for
-          </p>
-        </div>
-
-        <div className="p-5 bg-glass backdrop-blur-sm rounded-2xl shadow-glass-sm space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-text-primary mb-2">
-                Minimum
-              </label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-tertiary">
-                  $
-                </span>
-                <input
-                  type="number"
-                  value={budgetMin}
-                  onChange={(e) => setBudgetMin(Number(e.target.value))}
-                  min={0}
-                  className="w-full pl-8 pr-4 py-3 bg-background-secondary border border-border-light rounded-xl text-sm text-text-primary focus:outline-none focus:border-accent-orange focus:ring-2 focus:ring-accent-orange/20 transition-all"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-text-primary mb-2">
-                Maximum
-              </label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-tertiary">
-                  $
-                </span>
-                <input
-                  type="number"
-                  value={budgetMax}
-                  onChange={(e) => setBudgetMax(Number(e.target.value))}
-                  min={budgetMin}
-                  className="w-full pl-8 pr-4 py-3 bg-background-secondary border border-border-light rounded-xl text-sm text-text-primary focus:outline-none focus:border-accent-orange focus:ring-2 focus:ring-accent-orange/20 transition-all"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-2">
-            <div className="flex justify-between text-sm text-text-tertiary mb-2">
-              <span>${budgetMin}</span>
-              <span>${budgetMax}</span>
-            </div>
-            <div className="h-2 bg-background-tertiary rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-accent-orange to-accent-orange-dark"
-                style={{
-                  width: `${((budgetMax - budgetMin) / budgetMax) * 100}%`,
-                  marginLeft: `${(budgetMin / budgetMax) * 100}%`,
-                }}
-              />
-            </div>
-          </div>
         </div>
       </section>
 

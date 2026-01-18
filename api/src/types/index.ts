@@ -112,6 +112,7 @@ export const ChatMessageRequestSchema = z.object({
       retailer: z.string().optional(),
     })
     .optional(),
+  maxBudget: z.number().min(0).optional(),
 });
 
 export type ChatMessageRequest = z.infer<typeof ChatMessageRequestSchema>;

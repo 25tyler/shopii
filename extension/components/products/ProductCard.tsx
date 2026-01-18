@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { ProductCard } from '../../types';
 import { RatingBadge } from './RatingBadge';
 import { api } from '../../services/api';
+import { useFavoritesStore } from '../../stores/favoritesStore';
+import { useUserStore } from '../../stores/userStore';
 
 interface ProductCardProps {
   product: ProductCard;
@@ -10,6 +12,9 @@ interface ProductCardProps {
 export function ProductCardComponent({ product }: ProductCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const user = useUserStore((state) => state.user);
+  const { isFavorite, addFavorite, removeFavorite } = useFavoritesStore();
+  const isFavorited = isFavorite(product.id);
 
   // Get all available images (use imageUrls if available, fallback to single imageUrl)
   const images = product.imageUrls && product.imageUrls.length > 0
@@ -38,8 +43,32 @@ export function ProductCardComponent({ product }: ProductCardProps) {
     setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
   };
 
+  const handleToggleFavorite = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    try {
+      const isGuest = !user;
+      if (isFavorited) {
+        await removeFavorite(product.id, isGuest);
+      } else {
+        await addFavorite(product.id, isGuest, product);
+      }
+    } catch (error) {
+      console.error('Failed to toggle favorite:', error);
+    }
+  };
+
   return (
-    <div className="bg-glass backdrop-blur-md rounded-3xl hover:shadow-glass transition-all overflow-hidden shadow-glass-sm">
+    <div className="bg-glass backdrop-blur-md rounded-3xl hover:shadow-glass transition-all overflow-hidden shadow-glass-sm relative">
+      {/* Favorite button - Top Right */}
+      <button
+        onClick={handleToggleFavorite}
+        className="absolute top-3 right-3 z-10 w-8 h-8 flex items-center justify-center hover:scale-110 transition-transform bg-glass backdrop-blur-sm rounded-full shadow-glass-sm"
+        aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+      >
+        <StarIcon className="w-5 h-5" filled={isFavorited} />
+      </button>
+
       {/* Product Header */}
       <div className="p-4 flex gap-3">
         {/* Image Carousel */}
@@ -98,17 +127,15 @@ export function ProductCardComponent({ product }: ProductCardProps) {
         </div>
 
         {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2 mb-2">
-            <h3 className="font-medium text-text-primary text-base leading-tight">
-              {product.name}
-            </h3>
-            <RatingBadge rating={product.aiRating} size="sm" />
-          </div>
-          <p className="text-lg font-semibold text-text-primary mt-1">
+        <div className="flex-1 min-w-0 pr-8">
+          <h3 className="font-medium text-text-primary text-base leading-tight mb-2">
+            {product.name}
+          </h3>
+          <p className="text-lg font-semibold text-text-primary">
             {product.price.amount !== null ? `$${product.price.amount.toFixed(2)}` : 'Price varies'}
           </p>
-          <p className="text-xs text-text-tertiary">{product.retailer}</p>
+          <p className="text-xs text-text-tertiary mb-2">{product.retailer}</p>
+          <RatingBadge rating={product.aiRating} size="sm" />
         </div>
       </div>
 
@@ -247,6 +274,35 @@ function ChevronRightIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+    </svg>
+  );
+}
+
+function StarIcon({ className, filled }: { className?: string; filled?: boolean }) {
+  return (
+    <svg
+      className={`${className} transition-all duration-300 ${filled ? 'scale-100' : 'scale-90'}`}
+      viewBox="0 0 24 24"
+      style={{
+        filter: filled ? 'drop-shadow(0 0 4px rgba(218, 165, 32, 0.4))' : 'none'
+      }}
+    >
+      <defs>
+        <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#F9D949" />
+          <stop offset="50%" stopColor="#DAA520" />
+          <stop offset="100%" stopColor="#B8860B" />
+        </linearGradient>
+      </defs>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill={filled ? 'url(#goldGradient)' : 'none'}
+        stroke={filled ? '#B8860B' : 'currentColor'}
+        strokeWidth={filled ? 0.5 : 2}
+        d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
+        className={filled ? 'animate-[scaleIn_0.3s_ease-out]' : ''}
+      />
     </svg>
   );
 }

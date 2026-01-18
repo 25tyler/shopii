@@ -24,6 +24,7 @@ model User {
   clicks        AffiliateClick[]
   subscription  Subscription?
   usageTracking UsageTracking[]
+  favorites     FavoriteProduct[]
 
   @@map("users")
 }
@@ -63,6 +64,21 @@ model UserInteraction {
   @@map("user_interactions")
 }
 
+model FavoriteProduct {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  productId String   @map("product_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@index([productId])
+  @@map("favorite_products")
+}
+
 // Products
 model Product {
   id            String    @id @default(uuid())
@@ -85,6 +101,7 @@ model Product {
   interactions     UserInteraction[]
   clicks           AffiliateClick[]
   sponsoredProduct SponsoredProduct?
+  favoritedBy      FavoriteProduct[]
 
   @@unique([externalId, retailer])
   @@index([category])

@@ -251,6 +251,44 @@ class ApiClient {
     });
   }
 
+  // Favorites endpoints
+  async getFavorites() {
+    return this.request<Array<{
+      id: string;
+      userId: string;
+      productId: string;
+      createdAt: string;
+      product: {
+        id: string;
+        name: string;
+        description: string | null;
+        imageUrl: string | null;
+        currentPrice: number | null;
+        currency: string;
+        retailer: string;
+        affiliateUrl: string | null;
+        rating: {
+          aiRating: number | null;
+          pros: string[];
+          cons: string[];
+        } | null;
+      };
+    }>>('/api/users/favorites');
+  }
+
+  async addFavorite(productId: string) {
+    return this.request<{ success: boolean; favorite: { id: string; userId: string; productId: string; createdAt: string } }>('/api/users/favorites', {
+      method: 'POST',
+      body: { productId },
+    });
+  }
+
+  async removeFavorite(productId: string) {
+    return this.request<{ success: boolean }>(`/api/users/favorites/${productId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Chat endpoints
   async sendMessage(data: {
     message: string;
