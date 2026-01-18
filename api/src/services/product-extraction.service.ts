@@ -2,6 +2,7 @@
 import OpenAI from 'openai';
 import { tavily } from '@tavily/core';
 import { scrapeProductPage } from './web-scraper.service.js';
+import FirecrawlApp from '@mendable/firecrawl-js';
 
 // Google Custom Search API config
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
@@ -9,6 +10,7 @@ const GOOGLE_CX = process.env.GOOGLE_CX; // Custom Search Engine ID
 
 let _openai: OpenAI | null = null;
 let _tavily: ReturnType<typeof tavily> | null = null;
+let _firecrawl: FirecrawlApp | null = null;
 
 function getOpenAI(): OpenAI {
   if (!_openai) {
@@ -22,6 +24,16 @@ function getTavily() {
     _tavily = tavily({ apiKey: process.env.TAVILY_API_KEY! });
   }
   return _tavily;
+}
+
+function getFirecrawl(): FirecrawlApp | null {
+  if (!process.env.FIRECRAWL_API_KEY) {
+    return null; // Firecrawl is optional
+  }
+  if (!_firecrawl) {
+    _firecrawl = new FirecrawlApp({ apiKey: process.env.FIRECRAWL_API_KEY });
+  }
+  return _firecrawl;
 }
 
 export interface ExtractedProduct {
@@ -149,17 +161,21 @@ function extractPriceFromContent(content: string, productName: string): string |
 
   // Priority 1: Look for explicitly labeled current prices (most reliable)
   const labeledPricePatterns = [
-    /(?:current\s+price|price|our\s+price|sale\s+price|now)[:\s]*\$(\d{1,4}\.\d{2})\b/gi,
-    /\$(\d{1,4}\.\d{2})\s*(?:USD|usd)?(?:\s*-\s*|\s+)(?:free\s+shipping|in\s+stock|add\s+to\s+cart)/gi,
+    /(?:current\s+price|price|our\s+price|sale\s+price|now)[:\s"]*\$(\d{1,4}(?:\.\d{2})?)\b/gi,
+    /\$(\d{1,4}(?:\.\d{2})?)\s*(?:USD|usd)?(?:\s*-\s*|\s+)(?:free\s+shipping|in\s+stock|add\s+to\s+cart)/gi,
+    /"price"\s*:\s*"?\$(\d{1,4}(?:\.\d{2})?)["\/]?/gi, // JSON format: "price":"$40.00" or "$24/60"
+    /\$(\d{1,4}(?:\.\d{2})?)[\/\s](?:\d+\s+)?(?:capsule|capsules|tablet|tablets|serving|servings|count|ct|oz|lb|ea|each)/gi, // "$24/60 Capsules" or "$5/bottle"
   ];
 
   for (const pattern of labeledPricePatterns) {
     let match;
     while ((match = pattern.exec(content)) !== null) {
-      const price = parseFloat(match[1]);
+      // Remove potential trailing slash (e.g., "$24/" → "$24")
+      const priceStr = match[1].replace(/\/$/, '');
+      const price = parseFloat(priceStr);
       // Filter for reasonable consumer product prices
       if (price >= 4.99 && price <= 3000) {
-        console.log(`[PriceExtract] Found labeled price: $${price}`);
+        console.log(`[PriceExtract] Found labeled price: $${price.toFixed(2)}`);
         return `$${price.toFixed(2)}`;
       }
     }
@@ -178,9 +194,9 @@ function extractPriceFromContent(content: string, productName: string): string |
     }
   }
 
-  // Only use retail prices if we found at least 2 (more confident)
-  // and take the most common one
-  if (retailPrices.length >= 2) {
+  // If we found retail-formatted prices, use them
+  // Prefer prices that appear multiple times (more confident), but accept single occurrences too
+  if (retailPrices.length > 0) {
     // Find the most common price
     const priceCount = new Map<number, number>();
     for (const price of retailPrices) {
@@ -196,7 +212,7 @@ function extractPriceFromContent(content: string, productName: string): string |
       }
     }
 
-    console.log(`[PriceExtract] Found ${retailPrices.length} retail prices, most common: $${bestPrice} (${maxCount}x)`);
+    console.log(`[PriceExtract] Found ${retailPrices.length} retail prices, using: $${bestPrice} (${maxCount}x occurrences)`);
     return `$${bestPrice.toFixed(2)}`;
   }
 
@@ -220,8 +236,55 @@ function isRetailProductPage(url: string): boolean {
   return retailDomains.some(domain => urlLower.includes(domain));
 }
 
-// Fetch actual price from a product page URL using Tavily extract
+// Fetch price using Firecrawl (handles JavaScript-rendered content)
+async function fetchPriceWithFirecrawl(
+  url: string,
+  productName: string
+): Promise<string | null> {
+  const firecrawl = getFirecrawl();
+  if (!firecrawl) {
+    return null; // Firecrawl not configured
+  }
+
+  try {
+    console.log(`[Firecrawl] Scraping ${url} for ${productName}`);
+
+    const result = await firecrawl.scrape(url, {
+      formats: ['markdown'],
+      onlyMainContent: true,
+      waitFor: 3000, // Wait 3 seconds for dynamic content to load
+    });
+
+    // Check if we got markdown content
+    if (!result || !result.markdown) {
+      console.log(`[Firecrawl] Failed to scrape ${url} - no markdown returned`);
+      console.log(`[Firecrawl] Result:`, JSON.stringify(result, null, 2).slice(0, 500));
+      return null;
+    }
+
+    console.log(`[Firecrawl] Got ${result.markdown.length} chars of markdown`);
+
+    // Extract price from the markdown content
+    const price = extractPriceFromContent(result.markdown, productName);
+
+    if (price) {
+      console.log(`[Firecrawl] Found price ${price} from ${url}`);
+    } else {
+      console.log(`[Firecrawl] No price found in markdown from ${url}`);
+    }
+
+    return price;
+  } catch (error: any) {
+    console.error(`[Firecrawl] Error scraping ${url}:`, error.message);
+    return null;
+  }
+}
+
+// Fetch actual price from a product page URL with 2-tier fallback
+// Tier 1: Tavily extract (fast, free) - works for static HTML
+// Tier 2: Firecrawl (handles JS, cheap) - works for dynamic content
 async function fetchPriceFromProductPage(url: string, productName: string): Promise<string | null> {
+  // Tier 1: Try Tavily extract first (fastest, free)
   try {
     const client = getTavily();
 
@@ -232,22 +295,32 @@ async function fetchPriceFromProductPage(url: string, productName: string): Prom
 
     if (response.results && response.results.length > 0) {
       const content = response.results[0].rawContent || '';
-      console.log(`[PriceExtract] Extracted ${content.length} chars from ${url}`);
-      console.log(`[PriceExtract] Content preview: ${content.slice(0, 500)}`);
-      // Try to extract price from the actual page content
+      console.log(`[Tavily] Extracted ${content.length} chars from ${url}`);
+
+      // Try to extract price from the static content
       const price = extractPriceFromContent(content, productName);
       if (price) {
-        console.log(`[PriceExtract] Got price ${price} from page: ${url}`);
+        console.log(`[Tavily] ✓ Got price ${price} from page: ${url}`);
         return price;
       } else {
-        console.log(`[PriceExtract] No price found in extracted content`);
+        console.log(`[Tavily] No price in static content, trying Firecrawl...`);
       }
     } else {
-      console.log(`[PriceExtract] No results from extract for ${url}`);
+      console.log(`[Tavily] No results from extract, trying Firecrawl...`);
     }
   } catch (error) {
-    console.log(`[PriceExtract] Failed to extract from ${url}: ${error}`);
+    console.log(`[Tavily] Extract failed, trying Firecrawl...`);
   }
+
+  // Tier 2: Try Firecrawl (handles JavaScript-rendered prices)
+  const firecrawlPrice = await fetchPriceWithFirecrawl(url, productName);
+  if (firecrawlPrice) {
+    console.log(`[Firecrawl] ✓ Got price ${firecrawlPrice} from page: ${url}`);
+    return firecrawlPrice;
+  }
+
+  // No price found with either method
+  console.log(`[PriceExtract] ✗ No price found for ${url} with any method`);
   return null;
 }
 
