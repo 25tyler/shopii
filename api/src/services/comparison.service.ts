@@ -42,15 +42,29 @@ interface ResearchedProduct {
   rawMentions: string[]; // Collected quotes/mentions
 }
 
+// Interface for pre-researched product data from search mode
+export interface PreResearchedProduct {
+  name: string;
+  brand: string;
+  description: string;
+  pros: string[];
+  cons: string[];
+  endorsementQuotes: string[];
+  sourcesCount: number;
+  price?: number;
+  retailer?: string;
+}
+
 /**
- * Main comparison function - conducts deep research on selected products
+ * Main comparison function - uses pre-researched data from initial search
  */
 export async function conductDeepComparison(
   productNames: string[], // e.g., ["Sony WH-1000XM5", "Bose QC45"]
+  preResearchedData: PreResearchedProduct[], // Existing research data
   userQuery: string,
   onProgress?: (message: string) => void
 ): Promise<ComparisonData> {
-  console.log(`[Comparison] Starting deep comparison for ${productNames.length} products`);
+  console.log(`[Comparison] Starting comparison for ${productNames.length} products using pre-researched data`);
 
   if (productNames.length < 2) {
     throw new Error('Comparison requires at least 2 products');
@@ -60,39 +74,54 @@ export async function conductDeepComparison(
     productNames = productNames.slice(0, 5); // Limit to 5 for performance
   }
 
-  // Step 1: Research each product in parallel
-  onProgress?.('Researching products...');
-  const researchPromises = productNames.map(name => researchProductForComparison(name, onProgress));
-  const researchedProducts = await Promise.all(researchPromises);
+  // Convert pre-researched data to ResearchedProduct format
+  const researchedProducts: ResearchedProduct[] = preResearchedData.map(product => ({
+    name: product.name,
+    brand: product.brand,
+    sources: [
+      {
+        title: `Research summary for ${product.name}`,
+        url: '',
+        content: `${product.description}\n\nPros: ${product.pros.join(', ')}\n\nCons: ${product.cons.join(', ')}\n\n${product.endorsementQuotes.join('\n\n')}`,
+        sourceType: 'other' as const,
+      }
+    ],
+    rawMentions: [
+      product.description,
+      ...product.endorsementQuotes,
+      ...product.pros.map(pro => `Positive: ${pro}`),
+      ...product.cons.map(con => `Negative: ${con}`),
+    ],
+  }));
 
-  // Step 2: Generate sentiment data
+  // Step 1: Generate sentiment data from pre-researched pros/cons
   onProgress?.('Analyzing sentiment...');
-  const sentimentData = await generateSentimentData(researchedProducts);
+  const sentimentData = await generateSentimentFromPreResearch(preResearchedData);
 
-  // Step 3: Extract features and build comparison matrix
+  // Step 2: Extract features and build comparison matrix
   onProgress?.('Extracting features...');
   const featureMatrix = await generateFeatureMatrix(researchedProducts, userQuery);
 
-  // Step 4: Get prices
-  onProgress?.('Looking up prices...');
-  const priceData = await generatePriceComparison(productNames);
-
-  // Step 5: Calculate mention trends
+  // Step 3: Calculate mention trends from sources count
   onProgress?.('Calculating popularity...');
-  const mentionTrends = generateMentionTrends(researchedProducts);
+  const mentionTrends: MentionTrendsData = {
+    products: preResearchedData.map(p => ({
+      name: p.name,
+      totalMentions: p.sourcesCount || 1,
+    })),
+  };
 
-  // Step 6: Generate AI summary comparing all products
+  // Step 4: Generate AI summary comparing all products
   onProgress?.('Generating comparison summary...');
   const summary = await generateComparisonSummary(researchedProducts, userQuery);
 
-  console.log(`[Comparison] Deep comparison complete for ${productNames.length} products`);
+  console.log(`[Comparison] Comparison complete for ${productNames.length} products`);
 
   return {
     products: productNames,
     visualizations: {
       sentiment: sentimentData,
       features: featureMatrix,
-      prices: priceData,
       mentions: mentionTrends,
     },
     summary,
@@ -190,6 +219,40 @@ function inferSourceType(url: string): ResearchedProduct['sources'][0]['sourceTy
   }
 
   return 'other';
+}
+
+/**
+ * Generate sentiment data from pre-researched product pros/cons
+ */
+async function generateSentimentFromPreResearch(products: PreResearchedProduct[]): Promise<SentimentChartData> {
+  return {
+    products: products.map(product => {
+      // Calculate sentiment based on pros vs cons ratio
+      const totalItems = product.pros.length + product.cons.length;
+      const positiveRatio = totalItems > 0 ? (product.pros.length / totalItems) * 100 : 50;
+      const negativeRatio = totalItems > 0 ? (product.cons.length / totalItems) * 100 : 50;
+
+      // Distribute across all source types (since we don't have source-specific data)
+      return {
+        name: product.name,
+        reddit: {
+          positive: Math.round(positiveRatio),
+          negative: Math.round(negativeRatio),
+          neutral: Math.round(100 - positiveRatio - negativeRatio),
+        },
+        youtube: {
+          positive: Math.round(positiveRatio),
+          negative: Math.round(negativeRatio),
+          neutral: Math.round(100 - positiveRatio - negativeRatio),
+        },
+        expertReviews: {
+          positive: Math.round(positiveRatio),
+          negative: Math.round(negativeRatio),
+          neutral: Math.round(100 - positiveRatio - negativeRatio),
+        },
+      };
+    }),
+  };
 }
 
 /**

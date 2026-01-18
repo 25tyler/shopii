@@ -139,7 +139,6 @@ export interface ComparisonData {
   visualizations: {
     sentiment: SentimentChartData;
     features: FeatureMatrixData;
-    prices: PriceComparisonData;
     mentions: MentionTrendsData;
   };
   summary: string;
@@ -161,6 +160,22 @@ export const ChatMessageRequestSchema = z.object({
     .optional(),
   mode: ChatModeSchema.optional().default('auto'),
   selectedProducts: z.array(z.string()).optional(),
+  productData: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string(),
+    imageUrl: z.string(),
+    price: z.object({
+      amount: z.number().nullable(),
+      currency: z.string(),
+    }),
+    pros: z.array(z.string()),
+    cons: z.array(z.string()),
+    aiRating: z.number(),
+    matchScore: z.number(),
+    affiliateUrl: z.string(),
+    retailer: z.string(),
+  })).optional(),
 });
 
 export type ChatMessageRequest = z.infer<typeof ChatMessageRequestSchema>;

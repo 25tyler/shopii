@@ -1,3 +1,4 @@
+// UPDATED VERSION WITH COMPARISON MODE FIX
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
@@ -227,8 +228,13 @@ export async function chatRoutes(fastify: FastifyInstance) {
       preHandler: [optionalAuthMiddleware, searchRateLimitMiddleware],
     },
     async (request, reply) => {
+      console.log('='.repeat(80));
+      console.log('[Chat] NEW VERSION - Incoming request body:', JSON.stringify(request.body, null, 2));
+      console.log('='.repeat(80));
+
       const parseResult = ChatMessageRequestSchema.safeParse(request.body);
       if (!parseResult.success) {
+        console.error('[Chat] Validation error:', parseResult.error.flatten());
         return reply.status(400).send({
           error: 'Bad Request',
           message: 'Invalid request body',
@@ -236,10 +242,11 @@ export async function chatRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const { message, conversationId, pageContext, mode: requestedMode, selectedProducts } = parseResult.data;
+      const { message, conversationId, pageContext, mode: requestedMode, selectedProducts, productData } = parseResult.data;
       const userId = request.userId;
 
-      console.log(`[Chat] Mode: ${requestedMode}, Selected products: ${selectedProducts?.length || 0}`);
+      console.log(`[Chat] Parsed - Mode: ${requestedMode}, Selected products:`, selectedProducts);
+      console.log(`[Chat] Product data provided:`, productData ? `${productData.length} products` : 'none');
 
       // Set SSE headers
       reply.raw.writeHead(200, {
@@ -354,14 +361,33 @@ export async function chatRoutes(fastify: FastifyInstance) {
           });
 
         } else if (mode === 'comparison') {
-          // COMPARISON MODE: Deep research on selected products
+          // COMPARISON MODE: Use pre-researched data from previous search
           console.log(`[Chat] Using Comparison mode with ${selectedProducts?.length || 0} products`);
 
           if (!selectedProducts || selectedProducts.length < 2) {
             aiResponse = "To use comparison mode, please select at least 2 products to compare.";
+          } else if (!productData || productData.length < 2) {
+            aiResponse = "Product data is missing. Please search for products first, then select them for comparison.";
           } else {
             try {
-              // Conduct deep comparison with progress updates
+              console.log('[Chat] Using pre-researched product data for comparison');
+
+              // Convert frontend ProductCard to PreResearchedProduct format
+              const preResearchedData = productData.map(p => ({
+                name: p.name,
+                brand: p.name.split(' ')[0] || '', // Extract brand from name
+                description: p.description,
+                pros: p.pros || [],
+                cons: p.cons || [],
+                endorsementQuotes: [], // Not available from ProductCard
+                sourcesCount: p.matchScore || 1, // Use matchScore as proxy for sources
+                price: p.price.amount || 0,
+                retailer: p.retailer,
+              }));
+
+              console.log(`[Chat] Comparing ${preResearchedData.length} products:`, preResearchedData.map(p => p.name));
+
+              // Conduct comparison with progress updates (no new research needed!)
               const comparisonProgress = (msg: string) => {
                 sendEvent('progress', {
                   type: 'search_start',
@@ -370,7 +396,12 @@ export async function chatRoutes(fastify: FastifyInstance) {
                 });
               };
 
-              comparisonData = await conductDeepComparison(selectedProducts, message, comparisonProgress);
+              comparisonData = await conductDeepComparison(
+                selectedProducts,
+                preResearchedData,
+                message,
+                comparisonProgress
+              );
               aiResponse = comparisonData.summary;
 
               // Send comparison data and visualizations

@@ -78,7 +78,6 @@ export interface ComparisonData {
   visualizations: {
     sentiment: SentimentChartData;
     features: FeatureMatrixData;
-    prices: PriceComparisonData;
     mentions: MentionTrendsData;
   };
   summary: string; // AI-generated comparison summary

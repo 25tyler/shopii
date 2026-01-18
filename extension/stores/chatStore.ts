@@ -17,11 +17,14 @@ interface ChatState {
   } | null;
   selectedMode: ChatMode;
   selectedProductsForComparison: string[];
+  productsForComparison: ProductCard[]; // Full product data
 
   // Actions
-  sendMessage: (content: string, mode?: ChatMode, selectedProducts?: string[]) => Promise<void>;
+  sendMessage: (content: string, mode?: ChatMode, selectedProducts?: string[], productData?: ProductCard[]) => Promise<void>;
   setSelectedMode: (mode: ChatMode) => void;
   setSelectedProductsForComparison: (products: string[]) => void;
+  toggleProductSelection: (productName: string) => void;
+  clearProductSelection: () => void;
   createConversation: () => string;
   setActiveConversation: (id: string | null) => void;
   deleteConversation: (id: string) => void;
@@ -39,8 +42,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   pageContext: null,
   selectedMode: 'auto' as ChatMode,
   selectedProductsForComparison: [],
+  productsForComparison: [],
 
-  sendMessage: async (content: string, mode?: ChatMode, selectedProducts?: string[]) => {
+  sendMessage: async (content: string, mode?: ChatMode, selectedProducts?: string[], productData?: ProductCard[]) => {
     const state = get();
     let conversationId = state.activeConversationId;
 
@@ -118,6 +122,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           pageContext: state.pageContext || undefined,
           mode: mode || state.selectedMode || 'auto',
           selectedProducts: selectedProducts || state.selectedProductsForComparison || undefined,
+          productData: productData || state.productsForComparison || undefined,
         }),
       });
 
@@ -334,6 +339,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   setSelectedProductsForComparison: (products: string[]) => {
     set({ selectedProductsForComparison: products });
+  },
+
+  toggleProductSelection: (productName: string) => {
+    const currentSelection = get().selectedProductsForComparison;
+    if (currentSelection.includes(productName)) {
+      // Remove from selection
+      set({ selectedProductsForComparison: currentSelection.filter(p => p !== productName) });
+    } else {
+      // Add to selection (max 5 products)
+      if (currentSelection.length < 5) {
+        set({ selectedProductsForComparison: [...currentSelection, productName] });
+      }
+    }
+  },
+
+  clearProductSelection: () => {
+    set({ selectedProductsForComparison: [] });
   },
 
   initialize: async () => {

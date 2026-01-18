@@ -5,10 +5,11 @@ import { prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.dev.js';
 import { generateChatResponse, generateResearchBasedResponse, detectIntent } from '../services/ai.openai.js';
 import { conductProductResearch, enrichProducts } from '../services/research.service.js';
-import { extractProductsFromResearch, enhanceProductsWithEnrichment, ExtractedProduct, lookupProductUrl } from '../services/product-extraction.service.js';
+import { extractProductsFromResearch, enhanceProductsWithEnrichment, ExtractedProduct, lookupProductUrl, estimateProductPrice } from '../services/product-extraction.service.js';
 import { cacheProducts, searchCachedProducts } from '../services/product-cache.service.js';
 import { learnFromSearch } from '../services/preference-learning.service.js';
 import { formatArray, parseArray, formatJson, parseJson } from '../utils/db-helpers.js';
+import { conductDeepComparison, type PreResearchedProduct } from '../services/comparison.service.js';
 
 // Parse price string that might be a range like "$150-200" or single like "$149.99"
 // Returns null if no valid price found (so frontend can show "Price varies")
@@ -44,6 +45,24 @@ const ChatMessageRequestSchema = z.object({
       retailer: z.string().optional(),
     })
     .optional(),
+  mode: z.enum(['ask', 'search', 'comparison', 'auto']).optional().default('auto'),
+  selectedProducts: z.array(z.string()).optional(),
+  productData: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string(),
+    imageUrl: z.string(),
+    price: z.object({
+      amount: z.number().nullable(),
+      currency: z.string(),
+    }),
+    pros: z.array(z.string()),
+    cons: z.array(z.string()),
+    aiRating: z.number(),
+    matchScore: z.number(),
+    affiliateUrl: z.string(),
+    retailer: z.string(),
+  })).optional(),
 });
 
 export async function devChatRoutes(fastify: FastifyInstance) {
@@ -344,8 +363,10 @@ export async function devChatRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const { message, conversationId, pageContext } = parseResult.data;
+      const { message, conversationId, pageContext, mode: requestedMode, selectedProducts, productData } = parseResult.data;
       const userId = request.userId!;
+
+      fastify.log.info(`[Chat] Mode: ${requestedMode}, Selected products: ${selectedProducts?.length || 0}, Product data: ${productData?.length || 0}`);
 
       // Set SSE headers
       reply.raw.writeHead(200, {
@@ -424,9 +445,109 @@ export async function devChatRoutes(fastify: FastifyInstance) {
         let aiResponse: string;
         let extractedProducts: ExtractedProduct[] = [];
         let researchSources: Array<{ title: string; url: string }> = [];
+        let comparisonData: any = null;
 
-        // For product searches, conduct real-time research with progress callbacks
-        if (intent.type === 'product_search' || intent.type === 'comparison') {
+        // COMPARISON MODE: Conduct targeted research on selected products
+        if (requestedMode === 'comparison' && selectedProducts && selectedProducts.length >= 2) {
+          fastify.log.info(`[Chat] Using Comparison mode - conducting targeted research on ${selectedProducts.length} products`);
+
+          try {
+            // Send initial progress message for comparison mode
+            sendEvent('progress', {
+              type: 'search_start',
+              source: 'Researching products for comparison',
+              timestamp: Date.now(),
+            });
+
+            // Create comparison-specific query for deep research
+            const comparisonQuery = `Compare ${selectedProducts.join(' vs ')} - detailed comparison, pros and cons, reviews, pricing`;
+
+            // Search with progress callback that uses comparison-specific messages
+            const progressCallback = (event: any) => {
+              // Customize progress messages for comparison mode
+              if (event.type === 'search_start') {
+                sendEvent('progress', {
+                  ...event,
+                  source: 'Researching products for comparison',
+                });
+              } else {
+                sendEvent('progress', event);
+              }
+            };
+
+            // Conduct deep research specifically for comparison
+            const research = await conductProductResearch(comparisonQuery, progressCallback);
+            researchSources = research.sources.map((s) => ({ title: s.title, url: s.url }));
+
+            fastify.log.info(`[Comparison] Found ${research.sources.length} research sources for comparison`);
+
+            // Extract detailed product information from research
+            const researchedProducts: PreResearchedProduct[] = [];
+
+            for (const productName of selectedProducts) {
+              // Extract product-specific information from research context
+              const productExtracted = await extractProductsFromResearch(productName, research.context);
+
+              if (productExtracted && productExtracted.length > 0 && productExtracted[0]) {
+                const product = productExtracted[0];
+                // Try to get price from original productData as fallback
+                const originalProduct = productData?.find(p => p.name === productName);
+
+                researchedProducts.push({
+                  name: product.name,
+                  brand: product.brand,
+                  description: product.description,
+                  pros: product.pros || [],
+                  cons: product.cons || [],
+                  endorsementQuotes: product.endorsementQuotes || [],
+                  sourcesCount: product.sourcesCount || 1,
+                  price: originalProduct?.price?.amount || 0,
+                  retailer: product.retailer || originalProduct?.retailer || 'Various',
+                });
+              } else if (productData) {
+                // Fallback to basic product data if extraction fails
+                const fallback = productData.find(p => p.name === productName);
+                if (fallback) {
+                  researchedProducts.push({
+                    name: fallback.name,
+                    brand: fallback.name.split(' ')[0] || '',
+                    description: fallback.description,
+                    pros: fallback.pros || [],
+                    cons: fallback.cons || [],
+                    endorsementQuotes: [],
+                    sourcesCount: fallback.matchScore || 1,
+                    price: fallback.price.amount || 0,
+                    retailer: fallback.retailer,
+                  });
+                }
+              }
+            }
+
+            // Conduct comparison with progress updates
+            const comparisonProgress = (msg: string) => {
+              sendEvent('progress', {
+                type: 'comparison_progress',
+                source: msg,
+                timestamp: Date.now(),
+              });
+            };
+
+            comparisonData = await conductDeepComparison(
+              selectedProducts,
+              researchedProducts,
+              message,
+              comparisonProgress
+            );
+            aiResponse = comparisonData.summary;
+
+            // Send comparison data
+            sendEvent('comparison_data', { comparisonData });
+          } catch (error: any) {
+            fastify.log.error(`[Chat] Comparison error: ${error.message}`);
+            aiResponse = `I encountered an error while comparing these products: ${error.message || 'Unknown error'}. Please try again.`;
+          }
+        } else if (intent.type === 'product_search' || intent.type === 'comparison') {
+          // For product searches, conduct real-time research with progress callbacks
           fastify.log.info(`Conducting research for: "${message}"`);
 
           try {
@@ -557,6 +678,21 @@ export async function devChatRoutes(fastify: FastifyInstance) {
 
               if (urlInfo) {
                 // Successfully found and verified product page with price and images
+                let priceAmount = parsePrice(urlInfo.price);
+
+                // If no price was found or price is zero, estimate it using AI
+                if (priceAmount === null || priceAmount === 0) {
+                  fastify.log.info(`[Chat SSE] No valid price found for ${p.name}, estimating...`);
+                  const estimatedPrice = await estimateProductPrice(
+                    p.name,
+                    p.brand,
+                    p.category,
+                    p.description
+                  );
+                  priceAmount = parsePrice(estimatedPrice);
+                  fastify.log.info(`[Chat SSE] Estimated price for ${p.name}: ${estimatedPrice}`);
+                }
+
                 return {
                   id: `${p.brand}-${p.name}`.toLowerCase().replace(/\s+/g, '-'),
                   name: p.name,
@@ -565,7 +701,7 @@ export async function devChatRoutes(fastify: FastifyInstance) {
                   imageUrl: urlInfo.images[0] || '', // Primary image
                   imageUrls: urlInfo.images, // All images (3-5)
                   price: {
-                    amount: parsePrice(urlInfo.price),
+                    amount: priceAmount,
                     currency: 'USD',
                   },
                   pros: p.pros || [],

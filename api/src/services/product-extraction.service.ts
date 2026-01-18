@@ -220,6 +220,111 @@ function extractPriceFromContent(content: string, productName: string): string |
   return null;
 }
 
+/**
+ * Estimate price based on product name, brand, and category using AI
+ * Returns a specific price estimate (e.g., "$129.99") instead of null
+ */
+export async function estimateProductPrice(
+  productName: string,
+  brand: string,
+  category: string,
+  _description?: string
+): Promise<string> {
+  try {
+    const prompt = `Price estimate for: ${productName} by ${brand}
+Category: ${category}
+
+Return ONLY a realistic specific price like "$129.99" (must include .99 or .95). Nothing else.`;
+
+    const response = await getOpenAI().chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: 'You estimate retail prices. Return ONLY the price like "$149.99". Premium brands cost more, budget brands less.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      max_tokens: 10,
+      temperature: 0.1,
+    });
+
+    const estimatedPrice = response.choices[0]?.message?.content?.trim() || null;
+
+    if (estimatedPrice && estimatedPrice.match(/\$\d+\.\d{2}/)) {
+      console.log(`[PriceEstimate] Estimated price for ${productName}: ${estimatedPrice}`);
+      return estimatedPrice;
+    }
+
+    // Fallback: Simple category-based estimation
+    console.log(`[PriceEstimate] AI estimation failed, using category fallback for ${productName}`);
+    return estimatePriceFallback(category);
+
+  } catch (error) {
+    console.error('[PriceEstimate] Error estimating price:', error);
+    return estimatePriceFallback(category);
+  }
+}
+
+/**
+ * Fallback price estimation based on category
+ */
+function estimatePriceFallback(category: string): string {
+  const categoryLower = category.toLowerCase();
+
+  // Electronics & Tech
+  if (categoryLower.includes('headphone') || categoryLower.includes('earbud')) return '$149.99';
+  if (categoryLower.includes('laptop') || categoryLower.includes('macbook')) return '$999.99';
+  if (categoryLower.includes('phone') || categoryLower.includes('smartphone')) return '$799.99';
+  if (categoryLower.includes('tablet')) return '$499.99';
+  if (categoryLower.includes('smartwatch') || categoryLower.includes('watch')) return '$399.99';
+  if (categoryLower.includes('speaker')) return '$199.99';
+  if (categoryLower.includes('camera')) return '$599.99';
+  if (categoryLower.includes('monitor') || categoryLower.includes('display')) return '$349.99';
+  if (categoryLower.includes('keyboard')) return '$129.99';
+  if (categoryLower.includes('mouse')) return '$79.99';
+
+  // Fashion & Apparel
+  if (categoryLower.includes('t-shirt') || categoryLower.includes('tee')) return '$29.99';
+  if (categoryLower.includes('jeans') || categoryLower.includes('pants')) return '$79.99';
+  if (categoryLower.includes('jacket') || categoryLower.includes('coat')) return '$149.99';
+  if (categoryLower.includes('shoe') || categoryLower.includes('sneaker')) return '$119.99';
+  if (categoryLower.includes('boots')) return '$169.99';
+  if (categoryLower.includes('dress')) return '$89.99';
+  if (categoryLower.includes('sweater') || categoryLower.includes('hoodie')) return '$59.99';
+
+  // Home & Kitchen
+  if (categoryLower.includes('cookware') || categoryLower.includes('pan')) return '$89.99';
+  if (categoryLower.includes('mattress')) return '$799.99';
+  if (categoryLower.includes('pillow')) return '$49.99';
+  if (categoryLower.includes('blanket') || categoryLower.includes('comforter')) return '$129.99';
+  if (categoryLower.includes('towel')) return '$34.99';
+  if (categoryLower.includes('coffee maker')) return '$99.99';
+  if (categoryLower.includes('blender')) return '$79.99';
+  if (categoryLower.includes('vacuum')) return '$249.99';
+
+  // Health & Beauty
+  if (categoryLower.includes('skincare') || categoryLower.includes('serum')) return '$39.99';
+  if (categoryLower.includes('makeup')) return '$24.99';
+  if (categoryLower.includes('shampoo') || categoryLower.includes('conditioner')) return '$19.99';
+  if (categoryLower.includes('supplement') || categoryLower.includes('vitamin')) return '$29.99';
+
+  // Food & Beverage
+  if (categoryLower.includes('kombucha') || categoryLower.includes('juice')) return '$4.99';
+  if (categoryLower.includes('protein powder')) return '$49.99';
+  if (categoryLower.includes('coffee') || categoryLower.includes('tea')) return '$14.99';
+
+  // Sports & Outdoors
+  if (categoryLower.includes('yoga mat')) return '$69.99';
+  if (categoryLower.includes('dumbbell') || categoryLower.includes('weights')) return '$89.99';
+  if (categoryLower.includes('bike') || categoryLower.includes('bicycle')) return '$599.99';
+  if (categoryLower.includes('tent')) return '$249.99';
+  if (categoryLower.includes('backpack')) return '$99.99';
+
+  // Default fallback
+  return '$79.99';
+}
+
 // Check if URL is from a major retailer where we can reliably extract prices
 function isRetailProductPage(url: string): boolean {
   const urlLower = url.toLowerCase();

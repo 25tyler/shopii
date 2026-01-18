@@ -7,14 +7,22 @@ import { useUserStore } from '../../stores/userStore';
 
 interface ProductCardProps {
   product: ProductCard;
+  isSelected?: boolean;
+  onToggleSelection?: (productName: string) => void;
 }
 
-export function ProductCardComponent({ product }: ProductCardProps) {
+export function ProductCardComponent({ product, isSelected = false, onToggleSelection }: ProductCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const user = useUserStore((state) => state.user);
   const { isFavorite, addFavorite, removeFavorite } = useFavoritesStore();
   const isFavorited = isFavorite(product.id);
+
+  const handleCardClick = () => {
+    if (onToggleSelection) {
+      onToggleSelection(product.name);
+    }
+  };
 
   // Get all available images (use imageUrls if available, fallback to single imageUrl)
   const images = product.imageUrls && product.imageUrls.length > 0
@@ -59,7 +67,28 @@ export function ProductCardComponent({ product }: ProductCardProps) {
   };
 
   return (
-    <div className="bg-glass backdrop-blur-md rounded-3xl hover:shadow-glass transition-all overflow-hidden shadow-glass-sm relative">
+    <div
+      onClick={onToggleSelection ? handleCardClick : undefined}
+      className={`bg-glass backdrop-blur-md rounded-3xl transition-all overflow-hidden shadow-glass-sm relative
+        ${onToggleSelection ? 'cursor-pointer' : ''}
+        ${isSelected
+          ? 'ring-4 ring-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.4)] hover:shadow-[0_0_25px_rgba(168,85,247,0.5)]'
+          : 'hover:shadow-glass'
+        }`}
+    >
+      {/* Selection indicator badge - Top Left */}
+      {onToggleSelection && (
+        <div className="absolute top-3 left-3 z-10">
+          <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+            isSelected
+              ? 'bg-purple-500 text-white shadow-lg'
+              : 'bg-glass-dark/50 backdrop-blur-sm border-2 border-text-quaternary'
+          }`}>
+            {isSelected && <CheckIcon className="w-4 h-4" />}
+          </div>
+        </div>
+      )}
+
       {/* Favorite button - Top Right */}
       <button
         onClick={handleToggleFavorite}
