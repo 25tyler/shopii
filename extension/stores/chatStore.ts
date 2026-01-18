@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Message, Conversation, ProductCard } from '../types';
+import { Message, Conversation, ProductCard, ResearchProgressEvent, ResearchSource } from '../types';
 import { api } from '../services/api';
 
 interface ChatState {
@@ -63,13 +63,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ),
     }));
 
-    // Add loading message
+    // Add loading message with empty research sources
+    const loadingMessageId = crypto.randomUUID();
     const loadingMessage: Message = {
-      id: crypto.randomUUID(),
+      id: loadingMessageId,
       role: 'assistant',
       content: '',
       timestamp: Date.now(),
       isLoading: true,
+      researchSources: [],
     };
 
     set((state) => ({
@@ -85,65 +87,142 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
 
     try {
-      console.log('[ChatStore] Sending message:', content);
+      console.log('[ChatStore] Sending message with SSE:', content);
       console.log('[ChatStore] ConversationId:', conversationId);
       console.log('[ChatStore] PageContext:', state.pageContext);
 
-      // Call real API
-      const response = await api.sendMessage({
-        message: content,
-        conversationId: conversationId !== state.activeConversationId ? undefined : conversationId,
-        pageContext: state.pageContext || undefined,
+      // Get auth token
+      const authResult = await chrome.storage.local.get(['authToken']);
+      const token = authResult.authToken || null;
+
+      // Build SSE URL
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const url = `${API_BASE_URL}/api/chat/message-stream`;
+
+      // Use POST with fetch for SSE
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+        },
+        body: JSON.stringify({
+          message: content,
+          conversationId: conversationId !== state.activeConversationId ? undefined : conversationId,
+          pageContext: state.pageContext || undefined,
+        }),
       });
 
-      console.log('[ChatStore] API response received:', {
-        messageLength: response.message?.length,
-        productsCount: response.products?.length,
-        conversationId: response.conversationId,
-      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
-      // Map API response to ProductCard format
-      console.log('[ChatStore] Mapping products. Raw products:', response.products);
-      const products: ProductCard[] = response.products.map((p) => ({
-        id: p.id,
-        name: p.name,
-        description: p.description,
-        imageUrl: p.imageUrl,
-        price: p.price,
-        aiRating: p.aiRating || 0,
-        matchScore: p.matchScore || 0, // Query relevance score
-        confidence: p.confidence || 0,
-        pros: p.pros,
-        cons: p.cons,
-        affiliateUrl: p.affiliateUrl,
-        retailer: p.retailer,
-        isSponsored: p.isSponsored,
-      }));
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-      console.log('[ChatStore] Mapped products:', products.length, products.map(p => p.name));
+      let finalMessage = '';
+      let finalProducts: ProductCard[] = [];
+      let finalConversationId = conversationId;
+      let researchSummary: { totalSearches: number; totalSources: number } | undefined = undefined;
 
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+
+          const eventMatch = line.match(/^event: (.+)$/m);
+          const dataMatch = line.match(/^data: (.+)$/m);
+
+          if (eventMatch && dataMatch) {
+            const eventType = eventMatch[1];
+            const data = JSON.parse(dataMatch[1]);
+
+            console.log('[ChatStore SSE] Event:', eventType, data);
+
+            if (eventType === 'progress') {
+              // Update research sources
+              const event = data as ResearchProgressEvent;
+
+              // Handle research summary
+              if (event.type === 'research_summary' && event.totalSearches && event.totalSources) {
+                researchSummary = {
+                  totalSearches: event.totalSearches,
+                  totalSources: event.totalSources,
+                };
+              }
+
+              set((state) => ({
+                conversations: state.conversations.map((conv) =>
+                  conv.id === conversationId
+                    ? {
+                        ...conv,
+                        messages: conv.messages.map((msg) =>
+                          msg.id === loadingMessageId
+                            ? {
+                                ...msg,
+                                researchSources: updateResearchSources(msg.researchSources || [], event),
+                              }
+                            : msg
+                        ),
+                      }
+                    : conv
+                ),
+              }));
+            } else if (eventType === 'message') {
+              finalMessage = data.message;
+            } else if (eventType === 'products') {
+              finalProducts = (data.products || []).map((p: any) => ({
+                id: p.id,
+                name: p.name,
+                description: p.description,
+                imageUrl: p.imageUrl,
+                price: p.price,
+                aiRating: p.aiRating || 0,
+                matchScore: p.matchScore || 0,
+                confidence: p.confidence || 0,
+                pros: Array.isArray(p.pros) ? p.pros : [],
+                cons: Array.isArray(p.cons) ? p.cons : [],
+                affiliateUrl: p.affiliateUrl,
+                retailer: p.retailer,
+                isSponsored: p.isSponsored || false,
+              }));
+            } else if (eventType === 'conversationId') {
+              finalConversationId = data.conversationId || conversationId;
+            } else if (eventType === 'error') {
+              throw new Error(data.error);
+            }
+          }
+        }
+      }
+
+      console.log('[ChatStore SSE] Complete. Final message length:', finalMessage.length);
+      console.log('[ChatStore SSE] Products count:', finalProducts.length);
+
+      // Replace loading message with final response
       const assistantMessage: Message = {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: response.message,
+        content: finalMessage,
         timestamp: Date.now(),
-        products: products.length > 0 ? products : undefined,
+        products: finalProducts.length > 0 ? finalProducts : undefined,
+        researchSummary,
       };
 
-      console.log('[ChatStore] Assistant message created:', {
-        hasProducts: !!assistantMessage.products,
-        productsCount: assistantMessage.products?.length,
-      });
-
-      // Update with server response and potentially new conversationId
       set((state) => ({
         isLoading: false,
-        activeConversationId: response.conversationId || conversationId,
+        activeConversationId: finalConversationId,
         conversations: state.conversations.map((conv) =>
           conv.id === conversationId
             ? {
                 ...conv,
-                id: response.conversationId || conv.id,
+                id: finalConversationId,
                 messages: conv.messages.filter((m) => !m.isLoading).concat(assistantMessage),
                 updatedAt: Date.now(),
                 title:
@@ -290,3 +369,42 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 }));
+
+// Helper function to update research sources based on progress events
+function updateResearchSources(
+  sources: ResearchSource[],
+  event: ResearchProgressEvent
+): ResearchSource[] {
+  const newSources = [...sources];
+
+  if (event.type === 'search_start' && event.source) {
+    // Add or update source as "searching"
+    const existingIndex = newSources.findIndex((s) => s.name === event.source);
+    if (existingIndex >= 0) {
+      newSources[existingIndex] = {
+        ...newSources[existingIndex],
+        status: 'searching',
+        timestamp: event.timestamp,
+      };
+    } else {
+      newSources.push({
+        name: event.source,
+        status: 'searching',
+        timestamp: event.timestamp,
+      });
+    }
+  } else if (event.type === 'source_found' && event.source) {
+    // Update source as "found" with count
+    const existingIndex = newSources.findIndex((s) => s.name === event.source);
+    if (existingIndex >= 0) {
+      newSources[existingIndex] = {
+        ...newSources[existingIndex],
+        status: 'complete',
+        count: event.count,
+        timestamp: event.timestamp,
+      };
+    }
+  }
+
+  return newSources;
+}

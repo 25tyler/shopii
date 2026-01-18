@@ -12,6 +12,19 @@ function getTavily() {
   return _tavily;
 }
 
+// Progress tracking for SSE
+export interface ResearchProgressEvent {
+  type: 'search_start' | 'search_complete' | 'source_found' | 'ai_analysis_start' | 'ai_analysis_complete' | 'research_summary';
+  source?: string; // e.g., "Reddit", "YouTube", "Expert Reviews", or specific like "r/BuyItForLife"
+  query?: string;
+  count?: number;
+  timestamp: number;
+  totalSearches?: number; // Total number of searches performed
+  totalSources?: number; // Total number of unique sources found
+}
+
+export type ProgressCallback = (event: ResearchProgressEvent) => void;
+
 interface ProductMention {
   name: string;
   mentions: number;
@@ -31,14 +44,77 @@ interface ResearchResult {
   summary: string;
 }
 
+// Helper to determine source name from query/domain
+function inferSourceFromQuery(query: string, domains: string[]): string {
+  const lowerQuery = query.toLowerCase();
+
+  if (domains.some(d => d.includes('reddit.com')) || lowerQuery.includes('reddit')) {
+    return 'Reddit';
+  }
+  if (domains.some(d => d.includes('youtube.com')) || lowerQuery.includes('youtube')) {
+    return 'YouTube';
+  }
+  if (domains.some(d => d.includes('wirecutter') || d.includes('rtings') || d.includes('outdoorgearlab'))) {
+    return 'Expert Reviews';
+  }
+  if (domains.some(d => d.includes('forum') || d.includes('head-fi') || d.includes('styleforum') || d.includes('avsforum'))) {
+    return 'Forums';
+  }
+  return 'Web Sources';
+}
+
+// Helper to extract specific source name from URL (e.g., "r/headphones" from Reddit URL)
+function extractSpecificSource(url: string, title: string): string {
+  try {
+    const urlLower = url.toLowerCase();
+
+    // Reddit - extract subreddit
+    if (urlLower.includes('reddit.com/r/')) {
+      const match = url.match(/reddit\.com\/r\/([^\/\?]+)/i);
+      if (match) {
+        return `r/${match[1]}`;
+      }
+    }
+
+    // YouTube - extract channel or video title
+    if (urlLower.includes('youtube.com') || urlLower.includes('youtu.be')) {
+      // Use first 30 chars of title for YouTube
+      return title.length > 30 ? title.slice(0, 30) + '...' : title;
+    }
+
+    // Forums - extract site name
+    if (urlLower.includes('head-fi.org')) return 'Head-Fi';
+    if (urlLower.includes('styleforum.net')) return 'StyleForum';
+    if (urlLower.includes('avsforum.com')) return 'AVSForum';
+
+    // Expert reviews - extract site name
+    if (urlLower.includes('wirecutter')) return 'Wirecutter';
+    if (urlLower.includes('rtings.com')) return 'RTINGS';
+    if (urlLower.includes('outdoorgearlab')) return 'OutdoorGearLab';
+
+    // Generic - extract domain
+    const urlObj = new URL(url);
+    const domain = urlObj.hostname.replace('www.', '');
+    return domain;
+  } catch {
+    return 'Web Source';
+  }
+}
+
 
 
 // Step 1: Search Reddit/forums for what people actually recommend
-export async function searchForRecommendations(query: string): Promise<ResearchResult> {
+export async function searchForRecommendations(query: string, onProgress?: ProgressCallback): Promise<ResearchResult> {
   const client = getTavily();
+
+  // Notify: Starting AI search
+  onProgress?.({ type: 'search_start', source: 'Starting AI Search', timestamp: Date.now() });
 
   // Have AI generate optimized search queries and select relevant domains
   const strategy = await generateSearchStrategy(query);
+
+  // Complete AI search step
+  onProgress?.({ type: 'source_found', source: 'Starting AI Search', timestamp: Date.now() });
 
   console.log(`AI search strategy for "${query}":`, {
     queries: strategy.searchQueries.length,
@@ -48,6 +124,8 @@ export async function searchForRecommendations(query: string): Promise<ResearchR
 
   const allResults: Array<{ title: string; url: string; content: string }> = [];
   const seenUrls = new Set<string>();
+  const seenSpecificSources = new Set<string>(); // Track unique specific sources
+  let totalSearches = 0; // Track total searches performed
 
   // Use AI's priority domains - these are tailored to the query
   // If AI returns empty or just reddit, don't restrict domains at all
@@ -60,6 +138,8 @@ export async function searchForRecommendations(query: string): Promise<ResearchR
   // Search using AI-generated queries
   for (const searchQuery of strategy.searchQueries) {
     try {
+      totalSearches++;
+
       const response = await client.search(searchQuery, {
         searchDepth: 'advanced',
         maxResults: 10,
@@ -73,11 +153,35 @@ export async function searchForRecommendations(query: string): Promise<ResearchR
           if (seenUrls.has(result.url)) continue;
           seenUrls.add(result.url);
 
+          // Extract specific source name (e.g., r/headphones, Wirecutter, etc.)
+          const specificSource = extractSpecificSource(result.url, result.title);
+
+          // Only emit progress for new unique sources
+          if (!seenSpecificSources.has(specificSource)) {
+            seenSpecificSources.add(specificSource);
+
+            // Notify: Starting search for this specific source
+            onProgress?.({
+              type: 'search_start',
+              source: specificSource,
+              query: searchQuery,
+              timestamp: Date.now()
+            });
+          }
+
           // No scoring here - let the AI extraction service evaluate quality
           allResults.push({
             title: result.title,
             url: result.url,
             content: result.content,
+          });
+
+          // Notify: Found result from this specific source
+          onProgress?.({
+            type: 'source_found',
+            source: specificSource,
+            count: 1,
+            timestamp: Date.now()
           });
         }
       }
@@ -100,6 +204,8 @@ export async function searchForRecommendations(query: string): Promise<ResearchR
 
     for (const fallbackQuery of fallbackQueries) {
       try {
+        totalSearches++;
+
         const response = await client.search(fallbackQuery, {
           searchDepth: 'advanced',
           maxResults: 10,
@@ -111,10 +217,32 @@ export async function searchForRecommendations(query: string): Promise<ResearchR
           for (const result of response.results) {
             if (seenUrls.has(result.url)) continue;
             seenUrls.add(result.url);
+
+            // Extract specific source name
+            const specificSource = extractSpecificSource(result.url, result.title);
+
+            // Only emit progress for new unique sources
+            if (!seenSpecificSources.has(specificSource)) {
+              seenSpecificSources.add(specificSource);
+
+              onProgress?.({
+                type: 'search_start',
+                source: specificSource,
+                timestamp: Date.now()
+              });
+            }
+
             allResults.push({
               title: result.title,
               url: result.url,
               content: result.content,
+            });
+
+            onProgress?.({
+              type: 'source_found',
+              source: specificSource,
+              count: 1,
+              timestamp: Date.now()
             });
           }
         }
@@ -125,6 +253,14 @@ export async function searchForRecommendations(query: string): Promise<ResearchR
 
     console.log(`After fallback: ${allResults.length} total sources`);
   }
+
+  // Emit summary of research
+  onProgress?.({
+    type: 'research_summary',
+    totalSearches,
+    totalSources: seenSpecificSources.size,
+    timestamp: Date.now()
+  });
 
   // Return all results for AI to evaluate - no pre-scoring needed
   // The extraction AI will determine which sources have strong recommendations
@@ -173,12 +309,15 @@ export async function researchProduct(productName: string): Promise<{
 }
 
 // Full research pipeline: search for recommendations, then research each product
-export async function conductProductResearch(userQuery: string): Promise<{
+export async function conductProductResearch(userQuery: string, onProgress?: ProgressCallback): Promise<{
   sources: Array<{ title: string; url: string; content: string }>;
   context: string;
 }> {
   // Step 1: Find what people are recommending
-  const recommendations = await searchForRecommendations(userQuery);
+  const recommendations = await searchForRecommendations(userQuery, onProgress);
+
+  // Notify: Starting analysis
+  onProgress?.({ type: 'search_start', source: 'Analyzing Sources', timestamp: Date.now() });
 
   // Build context for AI to analyze - include more content from each source
   let context = `USER QUERY: "${userQuery}"\n\n`;
@@ -223,6 +362,9 @@ PRIORITIZATION (for sorting, not rejection):
 - Products with strong endorsements first
 - Niche quality brands over mainstream if research supports it
 - But ALWAYS include at least 3-5 products total`;
+
+  // Notify: Analysis complete
+  onProgress?.({ type: 'source_found', source: 'Analyzing Sources', timestamp: Date.now() });
 
   return {
     sources: recommendations.rawSources,

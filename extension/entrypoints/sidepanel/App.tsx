@@ -4,7 +4,6 @@ import { ChatContainer } from '../../components/chat/ChatContainer';
 import { SuggestionsPage } from '../../components/suggestions/SuggestionsPage';
 import { OnboardingFlow } from '../../components/onboarding/OnboardingFlow';
 import { SettingsPage } from '../../components/settings/SettingsPage';
-import { SettingsDropdown } from '../../components/settings/SettingsDropdown';
 import { useUserStore } from '../../stores/userStore';
 
 type Route = 'search' | 'saved' | 'for-you';
@@ -12,7 +11,6 @@ type SettingsTab = 'account' | 'preferences' | 'upgrade';
 
 export default function App() {
   const [activeRoute, setActiveRoute] = useState<Route>('search');
-  const [showSettingsDropdown, setShowSettingsDropdown] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('account');
   const { isOnboarded, isLoading, initialize, user } = useUserStore();
@@ -25,7 +23,6 @@ export default function App() {
   useEffect(() => {
     if (user && showSettingsModal) {
       setShowSettingsModal(false);
-      setShowSettingsDropdown(false);
     }
   }, [user]);
 
@@ -106,34 +103,27 @@ export default function App() {
               Sign In
             </button>
           ) : (
-            // Profile Picture for authenticated users
-            <>
-              <button
-                onClick={() => setShowSettingsDropdown(!showSettingsDropdown)}
-                className="w-9 h-9 rounded-full bg-accent-orange/10 backdrop-blur-sm flex items-center justify-center ring-2 ring-accent-orange/30 hover:ring-accent-orange/50 transition-all"
-                title="Profile & Settings"
-              >
-                {user.avatarUrl ? (
-                  <img
-                    src={user.avatarUrl}
-                    alt={user.name || user.email}
-                    className="w-full h-full rounded-full object-cover"
-                  />
-                ) : (
-                  <span className="text-sm font-medium text-accent-orange">
-                    {(user.name || user.email)[0].toUpperCase()}
-                  </span>
-                )}
-              </button>
-              <SettingsDropdown
-                isOpen={showSettingsDropdown}
-                onClose={() => setShowSettingsDropdown(false)}
-                onSelectTab={(tab) => {
-                  setSettingsTab(tab);
-                  setShowSettingsModal(true);
-                }}
-              />
-            </>
+            // Profile Picture for authenticated users - opens preferences directly
+            <button
+              onClick={() => {
+                setSettingsTab('preferences');
+                setShowSettingsModal(true);
+              }}
+              className="w-9 h-9 rounded-full bg-accent-orange/10 backdrop-blur-sm flex items-center justify-center ring-2 ring-accent-orange/30 hover:ring-accent-orange/50 transition-all"
+              title="Preferences & Settings"
+            >
+              {user.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.name || user.email}
+                  className="w-full h-full rounded-full object-cover"
+                />
+              ) : (
+                <span className="text-sm font-medium text-accent-orange">
+                  {(user.name || user.email)[0].toUpperCase()}
+                </span>
+              )}
+            </button>
           )}
         </div>
       </header>

@@ -20,6 +20,24 @@ export interface UserPreferences {
   brandExclusions: string[];
 }
 
+// Research progress types
+export interface ResearchSource {
+  name: string; // "Reddit", "YouTube", "Expert Reviews", "Forums", "AI Analysis"
+  status: 'searching' | 'found' | 'complete';
+  count?: number; // Number of results found
+  timestamp: number;
+}
+
+export interface ResearchProgressEvent {
+  type: 'search_start' | 'search_complete' | 'source_found' | 'ai_analysis_start' | 'ai_analysis_complete' | 'research_summary';
+  source?: string;
+  query?: string;
+  count?: number;
+  timestamp: number;
+  totalSearches?: number;
+  totalSources?: number;
+}
+
 // Chat types
 export interface Message {
   id: string;
@@ -28,6 +46,8 @@ export interface Message {
   timestamp: number;
   products?: ProductCard[];
   isLoading?: boolean;
+  researchSources?: ResearchSource[]; // For loading messages to show research progress
+  researchSummary?: { totalSearches: number; totalSources: number }; // Summary shown after loading
 }
 
 export interface Conversation {
