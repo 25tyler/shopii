@@ -1,6 +1,7 @@
 import React from 'react';
 import { Message } from '../../types';
 import { TypingIndicator } from './TypingIndicator';
+import { ResearchProgress } from './ResearchProgress';
 
 interface MessageBubbleProps {
   message: Message;
@@ -10,6 +11,11 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
 
   if (message.isLoading) {
+    // Show research progress if sources are being tracked
+    if (message.researchSources && message.researchSources.length > 0) {
+      return <ResearchProgress sources={message.researchSources} />;
+    }
+    // Fall back to simple typing indicator
     return (
       <div className="w-full py-4 px-5">
         <TypingIndicator />
@@ -31,6 +37,11 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   return (
     <div className="w-full py-4 px-5 mb-2">
       <p className="text-text-primary text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+      {message.researchSummary && (
+        <p className="text-text-secondary text-xs mt-3 italic">
+          Searched {message.researchSummary.totalSearches} queries across {message.researchSummary.totalSources} sources
+        </p>
+      )}
     </div>
   );
 }

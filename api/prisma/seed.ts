@@ -391,9 +391,16 @@ async function main() {
   }
 
   // Seed cached products for "For You" page
-  console.log('\n📦 Seeding cached products...');
+  console.log('\n📦 Checking cached products...');
 
-  const cachedProductsData = [
+  const cachedProductCount = await prisma.cachedProduct.count();
+
+  if (cachedProductCount > 0) {
+    console.log(`  ⏭️  Skipping cached products seeding (${cachedProductCount} products already exist)`);
+  } else {
+    console.log('  Seeding cached products...');
+
+    const cachedProductsData = [
     {
       name: 'Sony WH-1000XM5',
       brand: 'Sony',
@@ -506,6 +513,7 @@ async function main() {
     } else {
       console.log(`  ⏭️  Skipping "${product.name}" (already cached)`);
     }
+  }
   }
 
   console.log('\n🎉 Seeding complete!\n');

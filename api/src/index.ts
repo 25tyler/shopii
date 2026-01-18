@@ -1,3 +1,7 @@
+// Load environment variables from .env file
+import dotenv from 'dotenv';
+dotenv.config({ override: true });
+
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
@@ -9,7 +13,6 @@ import { usersRoutes } from './routes/users.routes.js';
 import { chatRoutes } from './routes/chat.routes.js';
 import { productsRoutes } from './routes/products.routes.js';
 import { suggestionsRoutes } from './routes/suggestions.routes.js';
-import { billingRoutes } from './routes/billing.routes.js';
 import { trackingRoutes } from './routes/tracking.routes.js';
 
 const fastify = Fastify({
@@ -71,7 +74,6 @@ await fastify.register(usersRoutes, { prefix: '/api/users' });
 await fastify.register(chatRoutes, { prefix: '/api/chat' });
 await fastify.register(productsRoutes, { prefix: '/api/products' });
 await fastify.register(suggestionsRoutes, { prefix: '/api/suggestions' });
-await fastify.register(billingRoutes, { prefix: '/api/billing' });
 await fastify.register(trackingRoutes, { prefix: '/api/tracking' });
 
 // Error handler

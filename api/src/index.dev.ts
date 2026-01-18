@@ -12,7 +12,6 @@ import { devUsersRoutes } from './routes/users.dev.routes.js';
 import { devChatRoutes } from './routes/chat.dev.routes.js';
 import { devProductsRoutes } from './routes/products.dev.routes.js';
 import { devSuggestionsRoutes } from './routes/suggestions.dev.routes.js';
-import { devBillingRoutes } from './routes/billing.dev.routes.js';
 import { devTrackingRoutes } from './routes/tracking.dev.routes.js';
 
 const PORT = parseInt(process.env.PORT || '3001');
@@ -58,7 +57,6 @@ await fastify.register(devUsersRoutes, { prefix: '/api/users' });
 await fastify.register(devChatRoutes, { prefix: '/api/chat' });
 await fastify.register(devProductsRoutes, { prefix: '/api/products' });
 await fastify.register(devSuggestionsRoutes, { prefix: '/api/suggestions' });
-await fastify.register(devBillingRoutes, { prefix: '/api/billing' });
 await fastify.register(devTrackingRoutes, { prefix: '/api/tracking' });
 
 // Error handler
@@ -101,7 +99,7 @@ try {
 ║                                                              ║
 ║   🛍️  Shopii API - DEVELOPMENT MODE                          ║
 ║                                                              ║
-║   Server: http://${HOST}:${PORT}                              ║
+║   Server: http://${HOST}:${PORT}                             ║
 ║                                                              ║
 ║   ✓ Real GPT-4o-mini AI responses                            ║
 ║   ✓ Mock authentication (auto-login as dev user)             ║
