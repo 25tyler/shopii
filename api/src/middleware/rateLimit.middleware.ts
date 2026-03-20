@@ -2,11 +2,11 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { checkRateLimit } from '../config/redis.js';
 import { prisma } from '../config/prisma.js';
 
-// Rate limits by plan - for hackathon: only limit guests, registered users get unlimited
+// Rate limits by plan — enforce per-user limits to prevent abuse (even with stolen tokens)
 const RATE_LIMITS = {
-  guest: { searches: 20, windowSeconds: 86400 }, // 20 per day for guests
-  free: { searches: Infinity, windowSeconds: 86400 }, // Unlimited for registered users
-  pro: { searches: Infinity, windowSeconds: 86400 }, // Unlimited (kept for compatibility)
+  guest: { searches: 20, windowSeconds: 86400 },  // 20/day by IP
+  free: { searches: 50, windowSeconds: 86400 },    // 50/day by userId
+  pro: { searches: Infinity, windowSeconds: 86400 }, // Unlimited for Pro subscribers
 };
 
 export async function searchRateLimitMiddleware(request: FastifyRequest, reply: FastifyReply) {
@@ -17,13 +17,13 @@ export async function searchRateLimitMiddleware(request: FastifyRequest, reply: 
   const plan = user?.plan || 'guest';
   const limits = RATE_LIMITS[plan as keyof typeof RATE_LIMITS] || RATE_LIMITS.guest;
 
-  // Free and Pro users have no limit (hackathon: only limit guests)
+  // Pro users have no search limit
   if (limits.searches === Infinity) {
     return;
   }
 
-  // Use user ID or IP for rate limiting key
-  const key = userId ? `ratelimit:search:${userId}` : `ratelimit:search:ip:${request.ip}`;
+  // Use user ID for authenticated users, IP for guests
+  const key = userId ? `ratelimit:search:user:${userId}` : `ratelimit:search:ip:${request.ip}`;
 
   const result = await checkRateLimit(key, limits.searches, limits.windowSeconds);
 
@@ -33,9 +33,12 @@ export async function searchRateLimitMiddleware(request: FastifyRequest, reply: 
   reply.header('X-RateLimit-Reset', result.resetAt);
 
   if (!result.allowed) {
+    const upgradeMsg = plan === 'guest'
+      ? 'Sign up for a free account to get more searches!'
+      : 'Upgrade to Pro for unlimited searches!';
     return reply.status(429).send({
       error: 'Too Many Requests',
-      message: `You've reached your daily search limit of ${limits.searches} searches. Sign up for a free account to get unlimited searches!`,
+      message: `You've reached your daily search limit of ${limits.searches} searches. ${upgradeMsg}`,
       resetAt: new Date(result.resetAt * 1000).toISOString(),
     });
   }

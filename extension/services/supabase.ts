@@ -104,6 +104,38 @@ export async function getAccessToken(): Promise<string | null> {
   return session?.access_token || null;
 }
 
+// Proactive token refresh: refresh token if it expires within 5 minutes
+// This prevents failed API calls due to expired tokens
+const TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000; // 5 minutes before expiry
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleTokenRefresh(expiresAt: number) {
+  if (refreshTimer) {
+    clearTimeout(refreshTimer);
+  }
+
+  const now = Date.now();
+  const expiresAtMs = expiresAt * 1000;
+  const refreshAt = expiresAtMs - TOKEN_REFRESH_MARGIN_MS;
+  const delay = Math.max(refreshAt - now, 0);
+
+  if (delay > 0) {
+    refreshTimer = setTimeout(async () => {
+      try {
+        const { data, error } = await supabase.auth.refreshSession();
+        if (error) {
+          console.error('Proactive token refresh failed:', error.message);
+        } else if (data.session) {
+          // onAuthStateChange will handle syncing to chrome.storage
+          scheduleTokenRefresh(data.session.expires_at ?? 0);
+        }
+      } catch {
+        // Refresh failed silently — next API call will trigger re-auth
+      }
+    }, delay);
+  }
+}
+
 // Listen for auth state changes and sync with chrome.storage
 supabase.auth.onAuthStateChange(async (event, session) => {
   if (session) {
@@ -116,7 +148,15 @@ supabase.auth.onAuthStateChange(async (event, session) => {
         avatarUrl: session.user.user_metadata?.avatar_url,
       },
     });
+    // Schedule proactive refresh before this token expires
+    if (session.expires_at) {
+      scheduleTokenRefresh(session.expires_at);
+    }
   } else {
     await chrome.storage.local.remove(['authToken', 'user']);
+    if (refreshTimer) {
+      clearTimeout(refreshTimer);
+      refreshTimer = null;
+    }
   }
 });
