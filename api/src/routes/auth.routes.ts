@@ -156,6 +156,12 @@ export async function authRoutes(fastify: FastifyInstance) {
         });
       }
 
+      // Fetch user plan from our database
+      const dbUser = await prisma.user.findUnique({
+        where: { id: data.user.id },
+        select: { plan: true },
+      });
+
       return {
         access_token: data.session.access_token,
         refresh_token: data.session.refresh_token,
@@ -165,6 +171,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           email: data.user.email,
           name: data.user.user_metadata?.full_name || null,
           avatarUrl: data.user.user_metadata?.avatar_url || null,
+          plan: dbUser?.plan || 'free',
         },
       };
     } catch (error: any) {
@@ -248,6 +255,12 @@ export async function authRoutes(fastify: FastifyInstance) {
       }
       // If user exists or no guest preferences, user will be synced via authMiddleware
 
+      // Fetch user plan from our database
+      const dbUser = await prisma.user.findUnique({
+        where: { id: data.user.id },
+        select: { plan: true },
+      });
+
       return {
         access_token: data.session?.access_token,
         refresh_token: data.session?.refresh_token,
@@ -257,6 +270,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           email: data.user.email,
           name: data.user.user_metadata?.full_name || null,
           avatarUrl: data.user.user_metadata?.avatar_url || null,
+          plan: dbUser?.plan || 'free',
         },
       };
     } catch (error: any) {

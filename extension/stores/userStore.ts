@@ -27,7 +27,7 @@ interface UserState {
   fetchUserData: () => Promise<void>;
 }
 
-// These should match the API rate limits in rateLimit.middleware.ts
+// Client-side UX guidance — should match API rate limits in rateLimit.middleware.ts
 const GUEST_SEARCH_LIMIT = 20;
 const FREE_SEARCH_LIMIT = 50;
 

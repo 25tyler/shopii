@@ -73,6 +73,29 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
   }
 }
 
+// Plan-based access control — use after authMiddleware
+// Usage: { preHandler: [authMiddleware, requirePlan('pro')] }
+export function requirePlan(...allowedPlans: string[]) {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = request.user;
+    if (!user) {
+      return reply.status(401).send({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+    }
+
+    if (!allowedPlans.includes(user.plan)) {
+      return reply.status(403).send({
+        error: 'Forbidden',
+        message: `This feature requires a ${allowedPlans.join(' or ')} plan. You are on the ${user.plan} plan.`,
+        requiredPlan: allowedPlans,
+        currentPlan: user.plan,
+      });
+    }
+  };
+}
+
 // Optional auth - doesn't fail if no token, just doesn't set user
 export async function optionalAuthMiddleware(request: FastifyRequest, _reply: FastifyReply) {
   const authHeader = request.headers.authorization;

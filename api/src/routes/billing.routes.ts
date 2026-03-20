@@ -277,6 +277,12 @@ export async function billingRoutes(fastify: FastifyInstance) {
               where: { userId: user.id },
               data: { status: 'past_due' },
             });
+
+            // Downgrade to free on payment failure — user can re-upgrade when payment succeeds
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { plan: 'free' },
+            });
           }
 
           break;

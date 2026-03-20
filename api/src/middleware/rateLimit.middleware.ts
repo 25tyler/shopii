@@ -2,10 +2,10 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { checkRateLimit } from '../config/redis.js';
 import { prisma } from '../config/prisma.js';
 
-// Rate limits by plan — enforce per-user limits to prevent abuse (even with stolen tokens)
+// Rate limits by plan — enforced server-side per-user to prevent abuse (even with stolen tokens)
 const RATE_LIMITS = {
-  guest: { searches: 20, windowSeconds: 86400 },  // 20/day by IP
-  free: { searches: 50, windowSeconds: 86400 },    // 50/day by userId
+  guest: { searches: 20, windowSeconds: 86400 },   // 20/day by IP
+  free: { searches: 50, windowSeconds: 86400 },     // 50/day by userId
   pro: { searches: Infinity, windowSeconds: 86400 }, // Unlimited for Pro subscribers
 };
 
@@ -68,8 +68,7 @@ export async function trackUsage(userId: string, type: 'search' | 'api_call') {
         searchCount: type === 'search' ? 1 : 0,
       },
     });
-  } catch (error) {
-    console.error('Failed to track usage:', error);
+  } catch {
     // Don't fail the request if tracking fails
   }
 }
