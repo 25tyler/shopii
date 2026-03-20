@@ -1,27 +1,38 @@
 import { z } from 'zod';
 
-// Development environment schema - allows optional values with defaults
+// Development environment schema — allows optional values with defaults
+// Mirrors env.ts but makes most things optional for easy local development
 const envSchema = z.object({
   // Server
   PORT: z.string().default('3001'),
   HOST: z.string().default('0.0.0.0'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 
-  // Database - uses SQLite in dev mode
+  // Database — uses SQLite in dev mode
   DATABASE_URL: z.string().default('file:./prisma/dev.db'),
 
-  // Redis - optional in dev (uses in-memory mock)
+  // Redis — optional in dev (uses in-memory mock)
   REDIS_URL: z.string().optional(),
 
-  // Supabase - optional in dev (uses mock auth)
+  // Supabase — optional in dev (uses mock auth)
   SUPABASE_URL: z.string().optional(),
   SUPABASE_ANON_KEY: z.string().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
 
-  // Anthropic (Claude) - optional in dev (uses mock AI)
+  // AI providers — optional in dev (can use mock AI)
+  OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
 
-  // Stripe - optional in dev (uses mock billing)
+  // Research / search
+  TAVILY_API_KEY: z.string().optional(),
+  GOOGLE_API_KEY: z.string().optional(),
+  GOOGLE_CX: z.string().optional(),
+
+  // Web scraping
+  FIRECRAWL_API_KEY: z.string().optional(),
+
+  // Stripe — optional in dev (uses mock billing)
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PRO_PRICE_ID: z.string().optional(),
@@ -31,6 +42,9 @@ const envSchema = z.object({
 
   // CORS
   CORS_ORIGIN: z.string().default('*'),
+
+  // Chrome Extension ID
+  CHROME_EXTENSION_ID: z.string().optional(),
 
   // Dev mode flag
   DEV_MODE: z.string().optional().transform((v) => v === 'true' || v === '1'),
