@@ -1,7 +1,7 @@
 // Preference learning service - learns user interests from search behavior
 import { prisma } from '../config/prisma.js';
 import { ExtractedProduct } from './product-extraction.service.js';
-import { formatArray, parseArray, formatJson, parseJson } from '../utils/db-helpers.js';
+import { formatArray, formatJson } from '../utils/db-helpers.js';
 
 interface LearnedCategory {
   category: string;

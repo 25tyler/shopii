@@ -144,7 +144,7 @@ export async function detectIntent(message: string): Promise<SearchIntent> {
   }
 
   if (questionPatterns.some((p) => p.test(lowerMessage))) {
-    return { type: 'question' };
+    return { type: 'product_question' };
   }
 
   return { type: 'general_chat' };

@@ -1,6 +1,6 @@
 // UPDATED VERSION WITH COMPARISON MODE FIX
 import { FastifyInstance } from 'fastify';
-import { z } from 'zod';
+import { z as _z } from 'zod';
 import { prisma } from '../config/prisma.js';
 import { searchRateLimitMiddleware, trackUsage } from '../middleware/rateLimit.middleware.js';
 import { RouteDeps } from './deps.js';
@@ -11,7 +11,7 @@ import { conductProductResearch, enrichProducts } from '../services/research.ser
 import { extractProductsFromResearch, enhanceProductsWithEnrichment, ExtractedProduct, lookupProductUrl } from '../services/product-extraction.service.js';
 import { cacheProducts, searchCachedProducts } from '../services/product-cache.service.js';
 import { learnFromSearch } from '../services/preference-learning.service.js';
-import { formatArray, parseArray, formatJson, parseJson } from '../utils/db-helpers.js';
+import { formatArray, parseArray, formatJson } from '../utils/db-helpers.js';
 import { detectMode } from '../services/mode-detection.service.js';
 import { conductDeepComparison } from '../services/comparison.service.js';
 import type { ChatMode, ComparisonData } from '../types/index.js';
@@ -85,7 +85,7 @@ export async function chatRoutes(fastify: FastifyInstance, deps: RouteDeps) {
           data: {
             userId,
             title: message.slice(0, 50),
-            pageContext: pageContext || null,
+            pageContext: pageContext ? (formatJson(pageContext) as any) : null,
           },
           include: {
             messages: true,
@@ -124,7 +124,7 @@ export async function chatRoutes(fastify: FastifyInstance, deps: RouteDeps) {
 
       // Build conversation history
       const conversationHistory =
-        conversation?.messages?.map((m: any) => ({
+        (conversation as any)?.messages?.map((m: any) => ({
           role: m.role as 'user' | 'assistant',
           content: m.content,
         })) || [];
@@ -136,13 +136,13 @@ export async function chatRoutes(fastify: FastifyInstance, deps: RouteDeps) {
           preferences: preferences
             ? {
                 userId: preferences.userId,
-                categories: preferences.categories,
+                categories: parseArray(preferences.categories) as string[],
                 budgetMin: preferences.budgetMin,
                 budgetMax: preferences.budgetMax,
                 currency: preferences.currency,
                 qualityPreference: preferences.qualityPreference as any,
-                brandPreferences: preferences.brandPreferences,
-                brandExclusions: preferences.brandExclusions,
+                brandPreferences: parseArray(preferences.brandPreferences) as string[],
+                brandExclusions: parseArray(preferences.brandExclusions) as string[],
               }
             : null,
           pageContext: pageContext || null,
@@ -172,13 +172,13 @@ export async function chatRoutes(fastify: FastifyInstance, deps: RouteDeps) {
               conversationId: conversation.id,
               role: 'user',
               content: message,
-              metadata: { intent },
+              metadata: formatJson({ intent }) as any,
             },
             {
               conversationId: conversation.id,
               role: 'assistant',
               content: aiResponse,
-              productsShown: products.map((p) => p.id),
+              productsShown: formatArray(products.map((p) => p.id)) as any,
             },
           ],
         });
@@ -285,7 +285,7 @@ export async function chatRoutes(fastify: FastifyInstance, deps: RouteDeps) {
             data: {
               userId,
               title: message.slice(0, 50),
-              pageContext: pageContext || null,
+              pageContext: pageContext ? (formatJson(pageContext) as any) : null,
             },
             include: {
               messages: true,
@@ -306,7 +306,7 @@ export async function chatRoutes(fastify: FastifyInstance, deps: RouteDeps) {
 
         // Build conversation history
         const conversationHistory =
-          conversation?.messages?.map((m: any) => ({
+          (conversation as any)?.messages?.map((m: any) => ({
             role: m.role as 'user' | 'assistant',
             content: m.content,
           })) || [];
@@ -315,13 +315,13 @@ export async function chatRoutes(fastify: FastifyInstance, deps: RouteDeps) {
         const parsedPreferences = preferences
           ? {
               userId: preferences.userId,
-              categories: parseArray(preferences.categories),
+              categories: parseArray(preferences.categories) as string[],
               budgetMin: preferences.budgetMin,
               budgetMax: preferences.budgetMax,
               currency: preferences.currency,
               qualityPreference: preferences.qualityPreference as any,
-              brandPreferences: parseArray(preferences.brandPreferences),
-              brandExclusions: parseArray(preferences.brandExclusions),
+              brandPreferences: parseArray(preferences.brandPreferences) as string[],
+              brandExclusions: parseArray(preferences.brandExclusions) as string[],
             }
           : null;
 

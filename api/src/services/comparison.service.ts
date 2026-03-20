@@ -131,7 +131,7 @@ export async function conductDeepComparison(
 /**
  * Research a single product deeply (20-30 sources)
  */
-async function researchProductForComparison(
+export async function _researchProductForComparison(
   productName: string,
   onProgress?: (message: string) => void
 ): Promise<ResearchedProduct> {
@@ -258,7 +258,7 @@ async function generateSentimentFromPreResearch(products: PreResearchedProduct[]
 /**
  * Generate sentiment data by analyzing sources for each product
  */
-async function generateSentimentData(products: ResearchedProduct[]): Promise<SentimentChartData> {
+export async function _generateSentimentData(products: ResearchedProduct[]): Promise<SentimentChartData> {
   const sentimentPromises = products.map(async (product) => {
     // Group sources by type
     const redditSources = product.sources.filter(s => s.sourceType === 'reddit');
@@ -420,7 +420,7 @@ ${productSummaries}`,
 /**
  * Look up prices for products
  */
-async function generatePriceComparison(productNames: string[]): Promise<PriceComparisonData> {
+export async function _generatePriceComparison(productNames: string[]): Promise<PriceComparisonData> {
   const pricePromises = productNames.map(async (name) => {
     try {
       // Extract brand and product name
@@ -459,7 +459,7 @@ async function generatePriceComparison(productNames: string[]): Promise<PriceCom
 /**
  * Calculate mention trends from research data
  */
-function generateMentionTrends(products: ResearchedProduct[]): MentionTrendsData {
+export function _generateMentionTrends(products: ResearchedProduct[]): MentionTrendsData {
   return {
     products: products.map(p => ({
       name: p.name,

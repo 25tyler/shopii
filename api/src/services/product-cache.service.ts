@@ -37,7 +37,7 @@ interface CachedProductDB {
 }
 
 // Validate price based on category - returns null if price seems wrong
-function validatePrice(price: string | null, category: string): string | null {
+export function validatePrice(price: string | null, category: string): string | null {
   if (!price) return null;
 
   const priceNum = parseFloat(price.replace(/[$,]/g, ''));
@@ -75,7 +75,7 @@ function dbToExtractedProduct(cached: CachedProductDB, matchScore: number = 75):
     brand: cached.brand,
     category: cached.category,
     description: cached.description,
-    estimatedPrice: validatePrice(cached.estimatedPrice, cached.category),
+    // estimatedPrice removed from ExtractedProduct — prices come from page scraping
     imageUrl: cached.imageUrl,
     affiliateUrl: cached.affiliateUrl,
     retailer: cached.retailer,
@@ -191,7 +191,7 @@ export async function cacheProducts(products: ExtractedProduct[]): Promise<void>
             lastSeenAt: new Date(),
             // Update image/price if we have new values
             imageUrl: product.imageUrl || existing.imageUrl,
-            estimatedPrice: product.estimatedPrice || existing.estimatedPrice,
+            estimatedPrice: (product as any).estimatedPrice || existing.estimatedPrice,
           },
         });
 
@@ -205,7 +205,7 @@ export async function cacheProducts(products: ExtractedProduct[]): Promise<void>
             brand: product.brand,
             category: product.category,
             description: product.description,
-            estimatedPrice: product.estimatedPrice,
+            estimatedPrice: (product as any).estimatedPrice,
             imageUrl: product.imageUrl,
             affiliateUrl: product.affiliateUrl,
             retailer: product.retailer,

@@ -61,7 +61,7 @@ export interface ExtractedProduct {
 const AMAZON_AFFILIATE_TAG = process.env.AMAZON_AFFILIATE_TAG || 'shopii-20';
 
 // Known DTC (direct-to-consumer) brands and their websites
-const DTC_BRANDS: Record<string, string> = {
+export const DTC_BRANDS: Record<string, string> = {
   'american giant': 'https://www.american-giant.com',
   'everlane': 'https://www.everlane.com',
   'allbirds': 'https://www.allbirds.com',
@@ -153,7 +153,7 @@ function getRetailerFromUrl(url: string): string {
 // Extract price from text content (Tavily result or page content)
 // Very conservative - only returns prices we're confident about
 // Prices should come from actual product pages, not random numbers in content
-function extractPriceFromContent(content: string, productName: string): string | null {
+function extractPriceFromContent(content: string, _productName: string): string | null {
   if (!content) return null;
 
   // Look for prices explicitly labeled as "price", "cost", "$X.XX" near product-related context
@@ -171,7 +171,7 @@ function extractPriceFromContent(content: string, productName: string): string |
     let match;
     while ((match = pattern.exec(content)) !== null) {
       // Remove potential trailing slash (e.g., "$24/" → "$24")
-      const priceStr = match[1].replace(/\/$/, '');
+      const priceStr = match[1]!.replace(/\/$/, '');
       const price = parseFloat(priceStr);
       // Filter for reasonable consumer product prices
       if (price >= 4.99 && price <= 3000) {
@@ -188,7 +188,7 @@ function extractPriceFromContent(content: string, productName: string): string |
   let match;
 
   while ((match = retailPricePattern.exec(content)) !== null) {
-    const price = parseFloat(match[1]);
+    const price = parseFloat(match[1]!);
     if (price >= 4.99 && price <= 3000) {
       retailPrices.push(price);
     }
@@ -212,8 +212,8 @@ function extractPriceFromContent(content: string, productName: string): string |
       }
     }
 
-    console.log(`[PriceExtract] Found ${retailPrices.length} retail prices, using: $${bestPrice} (${maxCount}x occurrences)`);
-    return `$${bestPrice.toFixed(2)}`;
+    console.log(`[PriceExtract] Found ${retailPrices.length} retail prices, using: $${bestPrice!} (${maxCount}x occurrences)`);
+    return `$${bestPrice!.toFixed(2)}`;
   }
 
   // No reliable price found - better to show "Price varies" than a wrong price
@@ -326,7 +326,7 @@ function estimatePriceFallback(category: string): string {
 }
 
 // Check if URL is from a major retailer where we can reliably extract prices
-function isRetailProductPage(url: string): boolean {
+export function isRetailProductPage(url: string): boolean {
   const urlLower = url.toLowerCase();
   const retailDomains = [
     'amazon.com',
@@ -388,7 +388,7 @@ async function fetchPriceWithFirecrawl(
 // Fetch actual price from a product page URL with 2-tier fallback
 // Tier 1: Tavily extract (fast, free) - works for static HTML
 // Tier 2: Firecrawl (handles JS, cheap) - works for dynamic content
-async function fetchPriceFromProductPage(url: string, productName: string): Promise<string | null> {
+export async function fetchPriceFromProductPage(url: string, productName: string): Promise<string | null> {
   // Tier 1: Try Tavily extract first (fastest, free)
   try {
     const client = getTavily();
@@ -399,7 +399,7 @@ async function fetchPriceFromProductPage(url: string, productName: string): Prom
     });
 
     if (response.results && response.results.length > 0) {
-      const content = response.results[0].rawContent || '';
+      const content = response.results[0]!.rawContent || '';
       console.log(`[Tavily] Extracted ${content.length} chars from ${url}`);
 
       // Try to extract price from the static content
@@ -533,7 +533,7 @@ export async function lookupProductUrl(
 
     // Try each result until we find a match
     for (let i = 0; i < Math.min(searchResults.length, 10); i++) {
-      const result = searchResults[i];
+      const result = searchResults[i]!;
       console.log(`[ProductURL] Trying result ${i + 1}: ${result.url}`);
 
       // Quick domain filter - skip obvious non-shopping sites
@@ -609,8 +609,8 @@ export async function getPurchaseUrl(
 // Sync version - returns placeholder URL that will be replaced by async lookup
 // Used during initial extraction, real URLs are fetched in chat route
 export function generatePurchaseUrl(
-  productName: string,
-  brand: string,
+  _productName: string,
+  _brand: string,
   recommendedRetailer?: string
 ): { url: string; retailer: string } {
   // Return a placeholder - the real URL will be looked up asynchronously

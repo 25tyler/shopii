@@ -7,15 +7,12 @@ interface RateLimitEntry {
 
 class MockRedis {
   private data: Map<string, RateLimitEntry> = new Map();
-  private connected = false;
-
   async connect(): Promise<void> {
-    this.connected = true;
     console.log('Mock Redis: Connected (in-memory)');
   }
 
   async quit(): Promise<void> {
-    this.connected = false;
+    // disconnected
     this.data.clear();
     console.log('Mock Redis: Disconnected');
   }

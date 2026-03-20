@@ -35,10 +35,10 @@ export async function scrapeProductPage(url: string): Promise<ScrapedProductPage
     const title = $('title').text().trim();
 
     // Extract price (common e-commerce selectors)
-    const price = extractPrice($);
+    const price = extractPrice($ as any);
 
     // Extract product images (3-5 from main gallery)
-    const images = extractProductImages($);
+    const images = extractProductImages($ as any);
 
     // Extract text for AI verification (limit to 3000 chars)
     $('script, style, nav, footer, header').remove();

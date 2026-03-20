@@ -69,14 +69,15 @@ await fastify.register(trackingRoutes, { prefix: '/api/tracking', ...routeDeps }
 await fastify.register(devBillingRoutes, { prefix: '/api/billing', ...routeDeps });
 
 // Error handler
-fastify.setErrorHandler((error, request, reply) => {
+fastify.setErrorHandler((err, _request, reply) => {
+  const error = err as Error & { statusCode?: number };
   fastify.log.error(error);
 
   if (error.name === 'ZodError') {
     return reply.status(400).send({
       error: 'Validation Error',
       message: 'Invalid request data',
-      details: error,
+      details: (error as any).flatten?.() || error.message,
     });
   }
 

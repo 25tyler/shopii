@@ -110,7 +110,7 @@ export async function devSuggestionsRoutes(fastify: FastifyInstance, deps: Route
       // Process in order of recency (topCategories is already sorted by recency score)
       if (topCategories.length > 0) {
         for (let i = 0; i < topCategories.length; i++) {
-          const category = topCategories[i];
+          const category = topCategories[i]!;
           const categoryProducts = await getCachedProductsByCategory(category, 5);
           for (const product of categoryProducts) {
             const key = `${product.brand}-${product.name}`.toLowerCase();
@@ -136,7 +136,7 @@ export async function devSuggestionsRoutes(fastify: FastifyInstance, deps: Route
       // 2. Get products from preferred brands
       if (topBrands.length > 0) {
         for (let i = 0; i < topBrands.length; i++) {
-          const brand = topBrands[i];
+          const brand = topBrands[i]!;
           const brandProducts = await searchCachedProducts(brand, 5);
           for (const product of brandProducts) {
             const key = `${product.brand}-${product.name}`.toLowerCase();
@@ -204,7 +204,7 @@ export async function devSuggestionsRoutes(fastify: FastifyInstance, deps: Route
           imageUrl: p.imageUrl || '',
           category: p.category,
           price: {
-            amount: parsePrice(p.estimatedPrice),
+            amount: parsePrice((p as any).estimatedPrice),
             currency: 'USD',
           },
           aiRating: p.qualityScore || 75,
@@ -282,7 +282,7 @@ export async function devSuggestionsRoutes(fastify: FastifyInstance, deps: Route
           imageUrl: p.imageUrl || '',
           category: p.category,
           price: {
-            amount: parsePrice(p.estimatedPrice),
+            amount: parsePrice((p as any).estimatedPrice),
             currency: 'USD',
           },
           aiRating: p.qualityScore || 75,
@@ -317,7 +317,7 @@ export async function devSuggestionsRoutes(fastify: FastifyInstance, deps: Route
         imageUrl: p.imageUrl || '',
         category: p.category,
         price: {
-          amount: parsePrice(p.estimatedPrice),
+          amount: parsePrice((p as any).estimatedPrice),
           currency: 'USD',
         },
         aiRating: p.qualityScore || 75,

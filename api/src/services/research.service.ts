@@ -45,7 +45,7 @@ interface ResearchResult {
 }
 
 // Helper to determine source name from query/domain
-function inferSourceFromQuery(query: string, domains: string[]): string {
+export function inferSourceFromQuery(query: string, domains: string[]): string {
   const lowerQuery = query.toLowerCase();
 
   if (domains.some(d => d.includes('reddit.com')) || lowerQuery.includes('reddit')) {

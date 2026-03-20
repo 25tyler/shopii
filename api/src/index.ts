@@ -121,7 +121,8 @@ await fastify.register(suggestionsRoutes, { prefix: '/api/suggestions', ...route
 await fastify.register(trackingRoutes, { prefix: '/api/tracking', ...routeDeps });
 
 // Error handler
-fastify.setErrorHandler((error, request, reply) => {
+fastify.setErrorHandler((err, _request, reply) => {
+  const error = err as Error & { statusCode?: number };
   fastify.log.error(error);
 
   const isProduction = env.NODE_ENV === 'production';
@@ -132,7 +133,7 @@ fastify.setErrorHandler((error, request, reply) => {
       error: 'Validation Error',
       message: 'Invalid request data',
       // Only include field-level errors in dev, never full Zod error object
-      ...(isProduction ? {} : { details: error.flatten?.() || error.issues }),
+      ...(isProduction ? {} : { details: (error as any).flatten?.() || (error as any).issues }),
     });
   }
 

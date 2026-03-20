@@ -4,7 +4,7 @@ import { env } from '../config/env.js';
 import { prisma } from '../config/prisma.js';
 import { RouteDeps } from './deps.js';
 
-const stripe = new Stripe(env.STRIPE_SECRET_KEY);
+const stripe = new Stripe(env.STRIPE_SECRET_KEY!);
 
 const PLANS = {
   pro: {
@@ -192,7 +192,7 @@ export async function billingRoutes(fastify: FastifyInstance, deps: RouteDeps) {
       let event: Stripe.Event;
 
       try {
-        event = stripe.webhooks.constructEvent(rawBody, sig, env.STRIPE_WEBHOOK_SECRET);
+        event = stripe.webhooks.constructEvent(rawBody, sig, env.STRIPE_WEBHOOK_SECRET!);
       } catch (err) {
         console.error('Webhook signature verification failed:', err);
         return reply.status(400).send({

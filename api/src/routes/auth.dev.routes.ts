@@ -141,7 +141,7 @@ export async function devAuthRoutes(fastify: FastifyInstance, deps: RouteDeps) {
   });
 
   // Google OAuth - mock implementation
-  fastify.post('/google', async (request, reply) => {
+  fastify.post('/google', async (request, _reply) => {
     const body = googleAuthSchema.parse(request.body);
 
     // In dev mode, create or get user based on a mock Google response

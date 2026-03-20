@@ -395,7 +395,7 @@ export async function authRoutes(fastify: FastifyInstance, deps: RouteDeps) {
     {
       preHandler: authMiddleware,
     },
-    async (request, reply) => {
+    async (request, _reply) => {
       const user = request.user!;
 
       // Delete user from Supabase

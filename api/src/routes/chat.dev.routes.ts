@@ -135,13 +135,13 @@ export async function devChatRoutes(fastify: FastifyInstance, deps: RouteDeps) {
       const parsedPreferences = preferences
         ? {
             userId: preferences.userId,
-            categories: parseArray(preferences.categories),
+            categories: parseArray(preferences.categories) as string[],
             budgetMin: preferences.budgetMin,
             budgetMax: preferences.budgetMax,
             currency: preferences.currency,
             qualityPreference: preferences.qualityPreference as any,
-            brandPreferences: parseArray(preferences.brandPreferences),
-            brandExclusions: parseArray(preferences.brandExclusions),
+            brandPreferences: parseArray(preferences.brandPreferences) as string[],
+            brandExclusions: parseArray(preferences.brandExclusions) as string[],
           }
         : null;
 
@@ -326,7 +326,7 @@ export async function devChatRoutes(fastify: FastifyInstance, deps: RouteDeps) {
               return null;
             }
           } catch (error) {
-            fastify.log.warn(`[Chat] URL lookup failed for ${p.name}:`, error);
+            fastify.log.warn(`[Chat] URL lookup failed for ${p.name}: ${error}`);
             return null;
           }
         })
@@ -433,19 +433,18 @@ export async function devChatRoutes(fastify: FastifyInstance, deps: RouteDeps) {
         const parsedPreferences = preferences
           ? {
               userId: preferences.userId,
-              categories: parseArray(preferences.categories),
+              categories: parseArray(preferences.categories) as string[],
               budgetMin: preferences.budgetMin,
               budgetMax: preferences.budgetMax,
               currency: preferences.currency,
               qualityPreference: preferences.qualityPreference as any,
-              brandPreferences: parseArray(preferences.brandPreferences),
-              brandExclusions: parseArray(preferences.brandExclusions),
+              brandPreferences: parseArray(preferences.brandPreferences) as string[],
+              brandExclusions: parseArray(preferences.brandExclusions) as string[],
             }
           : null;
 
         let aiResponse: string;
         let extractedProducts: ExtractedProduct[] = [];
-        let researchSources: Array<{ title: string; url: string }> = [];
         let comparisonData: any = null;
 
         // COMPARISON MODE: Conduct targeted research on selected products
@@ -478,7 +477,7 @@ export async function devChatRoutes(fastify: FastifyInstance, deps: RouteDeps) {
 
             // Conduct deep research specifically for comparison
             const research = await conductProductResearch(comparisonQuery, progressCallback);
-            researchSources = research.sources.map((s) => ({ title: s.title, url: s.url }));
+            // researchSources tracked for potential future use
 
             fastify.log.info(`[Comparison] Found ${research.sources.length} research sources for comparison`);
 
@@ -562,7 +561,7 @@ export async function devChatRoutes(fastify: FastifyInstance, deps: RouteDeps) {
             };
 
             const research = await conductProductResearch(message, progressCallback);
-            researchSources = research.sources.map((s) => ({ title: s.title, url: s.url }));
+            // researchSources tracked for potential future use
 
             fastify.log.info(`Found ${research.sources.length} research sources`);
 

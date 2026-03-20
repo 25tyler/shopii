@@ -8,9 +8,6 @@ interface ChatContext {
   recentSearches?: string[];
 }
 
-// Categories we have products for
-const SUPPORTED_CATEGORIES = ['headphones', 'audio', 'laptop', 'computer', 'keyboard', 'mouse', 'monitor', 'peripherals'];
-
 // Mock responses based on query patterns
 const mockResponses: Record<string, string> = {
   headphones: `Great choice looking for headphones! Based on my analysis of thousands of reviews across Reddit, YouTube, and expert sites, here are the top picks:`,
@@ -81,7 +78,7 @@ export async function detectIntent(message: string): Promise<SearchIntent> {
 
 export async function generateChatResponse(
   message: string,
-  context: ChatContext,
+  _context: ChatContext,
   products: ProductWithRating[]
 ): Promise<string> {
   // Simulate some latency
