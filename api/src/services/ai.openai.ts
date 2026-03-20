@@ -71,15 +71,15 @@ function buildUserContext(context: ChatContext): string {
 
   if (context.pageContext) {
     userContext += '\n\nCURRENT PAGE CONTEXT:';
-    userContext += `\n- URL: ${context.pageContext.url}`;
+    // Send only the retailer domain, not the full URL (may contain session/tracking params)
+    if (context.pageContext.retailer) {
+      userContext += `\n- Retailer: ${context.pageContext.retailer}`;
+    }
     if (context.pageContext.productName) {
       userContext += `\n- Product: ${context.pageContext.productName}`;
     }
     if (context.pageContext.price) {
       userContext += `\n- Price: ${context.pageContext.price}`;
-    }
-    if (context.pageContext.retailer) {
-      userContext += `\n- Retailer: ${context.pageContext.retailer}`;
     }
   }
 

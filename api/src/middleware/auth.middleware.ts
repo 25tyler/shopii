@@ -65,7 +65,7 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
     request.user = user;
     request.userId = user.id;
   } catch (error) {
-    console.error('Auth middleware error:', error);
+    request.log.error({ err: error }, 'Auth middleware error');
     return reply.status(401).send({
       error: 'Unauthorized',
       message: 'Authentication failed',
