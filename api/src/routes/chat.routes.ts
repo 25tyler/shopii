@@ -228,25 +228,19 @@ export async function chatRoutes(fastify: FastifyInstance) {
       preHandler: [optionalAuthMiddleware, searchRateLimitMiddleware],
     },
     async (request, reply) => {
-      console.log('='.repeat(80));
-      console.log('[Chat] NEW VERSION - Incoming request body:', JSON.stringify(request.body, null, 2));
-      console.log('='.repeat(80));
-
       const parseResult = ChatMessageRequestSchema.safeParse(request.body);
       if (!parseResult.success) {
-        console.error('[Chat] Validation error:', parseResult.error.flatten());
+        fastify.log.warn({ errors: parseResult.error.flatten().fieldErrors }, '[Chat] Validation error');
         return reply.status(400).send({
           error: 'Bad Request',
           message: 'Invalid request body',
-          details: parseResult.error.flatten().fieldErrors,
         });
       }
 
       const { message, conversationId, pageContext, mode: requestedMode, selectedProducts, productData } = parseResult.data;
       const userId = request.userId;
 
-      console.log(`[Chat] Parsed - Mode: ${requestedMode}, Selected products:`, selectedProducts);
-      console.log(`[Chat] Product data provided:`, productData ? `${productData.length} products` : 'none');
+      fastify.log.debug({ mode: requestedMode, selectedProducts: selectedProducts?.length ?? 0, hasProductData: !!productData }, '[Chat] Request parsed');
 
       // Set SSE headers
       reply.raw.writeHead(200, {
@@ -338,7 +332,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
           const detectedMode = await detectMode(message, conversationHistory);
           mode = detectedMode;
           sendEvent('mode_selected', { mode: detectedMode });
-          console.log(`[Chat] Auto mode selected: ${detectedMode}`);
+          fastify.log.debug({ detectedMode }, '[Chat] Auto mode selected');
         }
 
         let aiResponse: string;
@@ -353,7 +347,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
         // Handle different modes
         if (mode === 'ask') {
           // ASK MODE: Fast response without product research
-          console.log('[Chat] Using Ask mode');
+          fastify.log.debug('[Chat] Using Ask mode');
           aiResponse = await generateFastResponse(message, {
             preferences: parsedPreferences,
             pageContext: pageContext || null,
@@ -362,7 +356,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
 
         } else if (mode === 'comparison') {
           // COMPARISON MODE: Use pre-researched data from previous search
-          console.log(`[Chat] Using Comparison mode with ${selectedProducts?.length || 0} products`);
+          fastify.log.debug({ productCount: selectedProducts?.length ?? 0 }, '[Chat] Using Comparison mode');
 
           if (!selectedProducts || selectedProducts.length < 2) {
             aiResponse = "To use comparison mode, please select at least 2 products to compare.";
@@ -370,7 +364,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
             aiResponse = "Product data is missing. Please search for products first, then select them for comparison.";
           } else {
             try {
-              console.log('[Chat] Using pre-researched product data for comparison');
+              fastify.log.debug('[Chat] Using pre-researched product data for comparison');
 
               // Convert frontend ProductCard to PreResearchedProduct format
               const preResearchedData = productData.map(p => ({
@@ -385,7 +379,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
                 retailer: p.retailer,
               }));
 
-              console.log(`[Chat] Comparing ${preResearchedData.length} products:`, preResearchedData.map(p => p.name));
+              fastify.log.debug({ products: preResearchedData.map(p => p.name) }, '[Chat] Comparing products');
 
               // Conduct comparison with progress updates (no new research needed!)
               const comparisonProgress = (msg: string) => {
@@ -407,14 +401,14 @@ export async function chatRoutes(fastify: FastifyInstance) {
               // Send comparison data and visualizations
               sendEvent('comparison_data', { comparisonData });
             } catch (error: any) {
-              console.error('[Chat] Comparison error:', error);
+              fastify.log.error({ err: error }, '[Chat] Comparison error');
               aiResponse = `I encountered an error while comparing these products: ${error.message || 'Unknown error'}. Please try again.`;
             }
           }
 
         } else {
           // SEARCH MODE: Current implementation - conduct real-time research from Reddit/forums
-          console.log('[Chat] Using Search mode');
+          fastify.log.debug('[Chat] Using Search mode');
           try {
             // Check cached products first
             const cachedMatches = await searchCachedProducts(message, 5);
@@ -573,9 +567,10 @@ export async function chatRoutes(fastify: FastifyInstance) {
         sendEvent('done', {});
 
         reply.raw.end();
-      } catch (error: any) {
-        console.error('[SSE] Error:', error);
-        sendEvent('error', { error: error.message || 'Internal server error' });
+      } catch (error: unknown) {
+        const errMsg = error instanceof Error ? error.message : 'Internal server error';
+        fastify.log.error({ err: error }, '[SSE] Error');
+        sendEvent('error', { error: errMsg });
         reply.raw.end();
       }
     }

@@ -80,27 +80,30 @@ await fastify.register(trackingRoutes, { prefix: '/api/tracking' });
 fastify.setErrorHandler((error, request, reply) => {
   fastify.log.error(error);
 
+  const isProduction = env.NODE_ENV === 'production';
+
   // Handle Zod validation errors
   if (error.name === 'ZodError') {
     return reply.status(400).send({
       error: 'Validation Error',
       message: 'Invalid request data',
-      details: error,
+      // Only include field-level errors in dev, never full Zod error object
+      ...(isProduction ? {} : { details: error.flatten?.() || error.issues }),
     });
   }
 
-  // Handle Prisma errors
-  if (error.name === 'PrismaClientKnownRequestError') {
+  // Handle Prisma errors — never leak schema details
+  if (error.name === 'PrismaClientKnownRequestError' || error.name === 'PrismaClientValidationError') {
     return reply.status(400).send({
       error: 'Database Error',
       message: 'A database error occurred',
     });
   }
 
-  // Default error response
+  // Default error response — generic message in production, no stack traces, no internal error names
   reply.status(error.statusCode || 500).send({
-    error: error.name || 'Internal Server Error',
-    message: env.NODE_ENV === 'production' ? 'An error occurred' : error.message,
+    error: isProduction ? 'Internal Server Error' : (error.name || 'Internal Server Error'),
+    message: isProduction ? 'An unexpected error occurred' : error.message,
   });
 });
 
