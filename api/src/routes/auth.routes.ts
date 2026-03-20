@@ -361,8 +361,16 @@ export async function authRoutes(fastify: FastifyInstance) {
     }
   );
 
-  // Logout - just returns success (actual logout happens on client via Supabase)
-  fastify.post('/logout', { preHandler: authMiddleware }, async () => {
+  // Logout - revoke Supabase session server-side so leaked tokens can't be reused
+  fastify.post('/logout', { preHandler: authMiddleware }, async (request) => {
+    const user = request.user!;
+    try {
+      // Revoke all sessions for this user so stolen tokens become invalid
+      await supabaseAdmin.auth.admin.signOut(user.id, 'global');
+    } catch (error) {
+      // Log but don't fail the logout — client should still clear local state
+      fastify.log.error({ err: error, userId: user.id }, 'Failed to revoke Supabase session on logout');
+    }
     return { success: true };
   });
 

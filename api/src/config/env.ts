@@ -45,7 +45,7 @@ const envSchema = z.object({
   // CORS
   CORS_ORIGIN: z.string().default('chrome-extension://*'),
 
-  // Chrome Extension ID — set in production to restrict CORS
+  // Chrome Extension ID — set in production to restrict CORS to a single extension
   CHROME_EXTENSION_ID: z.string().optional(),
 });
 

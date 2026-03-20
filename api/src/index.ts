@@ -33,16 +33,30 @@ const fastify = Fastify({
 // Register plugins
 await fastify.register(cors, {
   origin: (origin, cb) => {
-    // Allow chrome extension and localhost in development
-    if (
-      !origin ||
-      origin.startsWith('chrome-extension://') ||
-      (env.NODE_ENV === 'development' && origin.startsWith('http://localhost'))
-    ) {
-      cb(null, true);
-    } else {
-      cb(new Error('Not allowed by CORS'), false);
+    // No origin (e.g. server-to-server, curl) — allow
+    if (!origin) {
+      return cb(null, true);
     }
+
+    // In development, allow any chrome extension and localhost
+    if (env.NODE_ENV === 'development') {
+      if (origin.startsWith('chrome-extension://') || origin.startsWith('http://localhost')) {
+        return cb(null, true);
+      }
+    }
+
+    // In production, only allow the specific extension ID configured in CHROME_EXTENSION_ID
+    // Falls back to allowing any chrome-extension:// if no ID is configured
+    if (origin.startsWith('chrome-extension://')) {
+      if (env.CHROME_EXTENSION_ID) {
+        const allowed = origin === `chrome-extension://${env.CHROME_EXTENSION_ID}`;
+        return cb(allowed ? null : new Error('Not allowed by CORS'), allowed);
+      }
+      // No specific ID configured — allow any extension (legacy behavior)
+      return cb(null, true);
+    }
+
+    cb(new Error('Not allowed by CORS'), false);
   },
   credentials: true,
 });
