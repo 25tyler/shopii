@@ -1,10 +1,11 @@
 // Development auth routes - uses mock authentication (no Supabase needed)
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../config/prisma.js';
-import { authMiddleware, DEV_USER_EMAIL, DEV_USER_ID } from '../middleware/auth.dev.js';
+import { DEV_USER_EMAIL, DEV_USER_ID } from '../middleware/auth.dev.js';
 import { z } from 'zod';
-import { formatArray, parseArray } from '@/utils/db-helpers.js';
+import { formatArray, parseArray } from '../utils/db-helpers.js';
 import crypto from 'crypto';
+import { RouteDeps } from './deps.js';
 
 // Validation schemas
 const signUpSchema = z.object({
@@ -44,7 +45,8 @@ const googleAuthSchema = z.object({
     .optional(),
 });
 
-export async function devAuthRoutes(fastify: FastifyInstance) {
+export async function devAuthRoutes(fastify: FastifyInstance, deps: RouteDeps) {
+  const { authMiddleware } = deps;
   // Sign up - creates user directly in database (no Supabase)
   fastify.post('/signup', async (request, reply) => {
     const body = signUpSchema.parse(request.body);

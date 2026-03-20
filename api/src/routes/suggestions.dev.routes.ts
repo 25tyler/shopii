@@ -1,7 +1,7 @@
 // Development suggestions routes - uses CachedProduct and learned preferences
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth.dev.js';
+import { RouteDeps } from './deps.js';
 import {
   getLearnedPreferences,
   getTopCategories,
@@ -34,7 +34,8 @@ function parsePrice(priceStr: string | null | undefined): number {
   return isNaN(price) ? 0 : price;
 }
 
-export async function devSuggestionsRoutes(fastify: FastifyInstance) {
+export async function devSuggestionsRoutes(fastify: FastifyInstance, deps: RouteDeps) {
+  const { authMiddleware, optionalAuthMiddleware } = deps;
   // Get personalized suggestions feed based on learned preferences
   fastify.get(
     '/',

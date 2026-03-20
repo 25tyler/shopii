@@ -1,9 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../config/prisma.js';
-import { authMiddleware } from '../middleware/auth.middleware.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { formatArray, parseArray } from '../utils/db-helpers.js';
 import { z } from 'zod';
+import { RouteDeps } from './deps.js';
 
 // Validation schemas
 const signUpSchema = z.object({
@@ -43,7 +43,8 @@ const googleAuthSchema = z.object({
     .optional(),
 });
 
-export async function authRoutes(fastify: FastifyInstance) {
+export async function authRoutes(fastify: FastifyInstance, deps: RouteDeps) {
+  const { authMiddleware } = deps;
   // Sign up with email/password
   fastify.post('/signup', async (request, reply) => {
     const validation = signUpSchema.safeParse(request.body);

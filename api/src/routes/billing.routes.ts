@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import Stripe from 'stripe';
 import { env } from '../config/env.js';
 import { prisma } from '../config/prisma.js';
-import { authMiddleware } from '../middleware/auth.middleware.js';
+import { RouteDeps } from './deps.js';
 
 const stripe = new Stripe(env.STRIPE_SECRET_KEY);
 
@@ -26,7 +26,8 @@ const PLANS = {
   },
 };
 
-export async function billingRoutes(fastify: FastifyInstance) {
+export async function billingRoutes(fastify: FastifyInstance, deps: RouteDeps) {
+  const { authMiddleware } = deps;
   // Get available plans
   fastify.get('/plans', async () => {
     return {

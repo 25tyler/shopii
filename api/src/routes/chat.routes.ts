@@ -2,8 +2,8 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
-import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth.middleware.js';
 import { searchRateLimitMiddleware, trackUsage } from '../middleware/rateLimit.middleware.js';
+import { RouteDeps } from './deps.js';
 import { generateChatResponse, generateResearchBasedResponse, detectIntent, generateFastResponse } from '../services/ai.openai.js';
 import { ChatMessageRequestSchema } from '../types/index.js';
 import type { ResearchProgressEvent } from '../services/research.service.js';
@@ -37,7 +37,8 @@ function parsePrice(priceStr: string | null | undefined): number | null {
   return isNaN(price) ? null : price;
 }
 
-export async function chatRoutes(fastify: FastifyInstance) {
+export async function chatRoutes(fastify: FastifyInstance, deps: RouteDeps) {
+  const { authMiddleware, optionalAuthMiddleware } = deps;
   // Send a message and get AI response
   fastify.post(
     '/message',

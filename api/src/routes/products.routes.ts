@@ -1,10 +1,12 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
-import { optionalAuthMiddleware } from '../middleware/auth.middleware.js';
-import { ProductSearchRequestSchema } from '../types/index.js';
+import { isPostgres, parseArray, parseJson } from '../utils/db-helpers.js';
+import { RouteDeps } from './deps.js';
 
-export async function productsRoutes(fastify: FastifyInstance) {
+export async function productsRoutes(fastify: FastifyInstance, deps: RouteDeps) {
+  const { optionalAuthMiddleware } = deps;
+
   // Search products
   fastify.get(
     '/search',
@@ -33,40 +35,61 @@ export async function productsRoutes(fastify: FastifyInstance) {
 
       const { q, category, minPrice, maxPrice, minRating, limit, offset } = parseResult.data;
 
-      // Build where clause
-      const where: any = {
-        OR: [{ name: { contains: q, mode: 'insensitive' } }, { description: { contains: q, mode: 'insensitive' } }],
-      };
+      let filteredProducts;
+      let total: number;
 
-      if (category) {
-        where.category = category;
+      if (isPostgres) {
+        // PostgreSQL: use native case-insensitive search
+        const where: any = {
+          OR: [
+            { name: { contains: q, mode: 'insensitive' } },
+            { description: { contains: q, mode: 'insensitive' } },
+          ],
+        };
+        if (category) where.category = category;
+        if (minPrice !== undefined || maxPrice !== undefined) {
+          where.currentPrice = {};
+          if (minPrice !== undefined) where.currentPrice.gte = minPrice;
+          if (maxPrice !== undefined) where.currentPrice.lte = maxPrice;
+        }
+
+        const products = await prisma.product.findMany({
+          where,
+          include: { rating: true },
+          orderBy: [{ rating: { aiRating: 'desc' } }, { createdAt: 'desc' }],
+          take: limit,
+          skip: offset,
+        });
+
+        filteredProducts = minRating !== undefined
+          ? products.filter((p) => (p.rating?.aiRating || 0) >= minRating)
+          : products;
+        total = await prisma.product.count({ where });
+      } else {
+        // SQLite: fetch all and filter in memory
+        const qLower = q.toLowerCase();
+        let products = await prisma.product.findMany({
+          include: { rating: true },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        products = products.filter(
+          (p) =>
+            p.name.toLowerCase().includes(qLower) ||
+            (p.description && p.description.toLowerCase().includes(qLower)),
+        );
+        if (category) products = products.filter((p) => p.category === category);
+        if (minPrice !== undefined)
+          products = products.filter((p) => p.currentPrice && Number(p.currentPrice) >= minPrice);
+        if (maxPrice !== undefined)
+          products = products.filter((p) => p.currentPrice && Number(p.currentPrice) <= maxPrice);
+        if (minRating !== undefined)
+          products = products.filter((p) => (p.rating?.aiRating || 0) >= minRating);
+
+        products.sort((a, b) => (b.rating?.aiRating || 0) - (a.rating?.aiRating || 0));
+        total = products.length;
+        filteredProducts = products.slice(offset, offset + limit);
       }
-
-      if (minPrice !== undefined || maxPrice !== undefined) {
-        where.currentPrice = {};
-        if (minPrice !== undefined) where.currentPrice.gte = minPrice;
-        if (maxPrice !== undefined) where.currentPrice.lte = maxPrice;
-      }
-
-      // Get products with ratings
-      const products = await prisma.product.findMany({
-        where,
-        include: {
-          rating: true,
-        },
-        orderBy: [{ rating: { aiRating: 'desc' } }, { createdAt: 'desc' }],
-        take: limit,
-        skip: offset,
-      });
-
-      // Filter by rating if specified
-      let filteredProducts = products;
-      if (minRating !== undefined) {
-        filteredProducts = products.filter((p) => (p.rating?.aiRating || 0) >= minRating);
-      }
-
-      // Get total count for pagination
-      const total = await prisma.product.count({ where });
 
       return {
         products: filteredProducts.map((p) => ({
@@ -82,8 +105,8 @@ export async function productsRoutes(fastify: FastifyInstance) {
           },
           aiRating: p.rating?.aiRating || null,
           confidence: p.rating?.confidence ? Number(p.rating.confidence) : null,
-          pros: p.rating?.pros || [],
-          cons: p.rating?.cons || [],
+          pros: parseArray(p.rating?.pros),
+          cons: parseArray(p.rating?.cons),
           affiliateUrl: p.affiliateUrl,
           retailer: p.retailer,
         })),
@@ -94,7 +117,7 @@ export async function productsRoutes(fastify: FastifyInstance) {
           hasMore: offset + limit < total,
         },
       };
-    }
+    },
   );
 
   // Get product by ID
@@ -106,9 +129,8 @@ export async function productsRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params as { id: string };
 
-      // Validate UUID
       const uuidSchema = z.string().uuid();
-      if (!uuidSchema.safeParse(id).success) {
+      if (isPostgres && !uuidSchema.safeParse(id).success) {
         return reply.status(400).send({
           error: 'Bad Request',
           message: 'Invalid product ID',
@@ -117,9 +139,7 @@ export async function productsRoutes(fastify: FastifyInstance) {
 
       const product = await prisma.product.findUnique({
         where: { id },
-        include: {
-          rating: true,
-        },
+        include: { rating: true },
       });
 
       if (!product) {
@@ -129,7 +149,6 @@ export async function productsRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Track view if user is authenticated
       if (request.userId) {
         await prisma.userInteraction.create({
           data: {
@@ -154,25 +173,31 @@ export async function productsRoutes(fastify: FastifyInstance) {
         },
         affiliateUrl: product.affiliateUrl,
         retailer: product.retailer,
-        metadata: product.metadata,
+        metadata: parseJson(product.metadata as any),
         lastScrapedAt: product.lastScrapedAt,
         rating: product.rating
           ? {
               aiRating: product.rating.aiRating,
               confidence: product.rating.confidence ? Number(product.rating.confidence) : null,
-              sentimentScore: product.rating.sentimentScore ? Number(product.rating.sentimentScore) : null,
-              reliabilityScore: product.rating.reliabilityScore ? Number(product.rating.reliabilityScore) : null,
+              sentimentScore: product.rating.sentimentScore
+                ? Number(product.rating.sentimentScore)
+                : null,
+              reliabilityScore: product.rating.reliabilityScore
+                ? Number(product.rating.reliabilityScore)
+                : null,
               valueScore: product.rating.valueScore ? Number(product.rating.valueScore) : null,
-              popularityScore: product.rating.popularityScore ? Number(product.rating.popularityScore) : null,
+              popularityScore: product.rating.popularityScore
+                ? Number(product.rating.popularityScore)
+                : null,
               sourcesAnalyzed: product.rating.sourcesAnalyzed,
-              pros: product.rating.pros,
-              cons: product.rating.cons,
+              pros: parseArray(product.rating.pros),
+              cons: parseArray(product.rating.cons),
               summary: product.rating.summary,
               calculatedAt: product.rating.calculatedAt,
             }
           : null,
       };
-    }
+    },
   );
 
   // Get product reviews summary
@@ -184,9 +209,8 @@ export async function productsRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params as { id: string };
 
-      // Validate UUID
       const uuidSchema = z.string().uuid();
-      if (!uuidSchema.safeParse(id).success) {
+      if (isPostgres && !uuidSchema.safeParse(id).success) {
         return reply.status(400).send({
           error: 'Bad Request',
           message: 'Invalid product ID',
@@ -215,20 +239,20 @@ export async function productsRoutes(fastify: FastifyInstance) {
         productId: product.id,
         productName: product.name,
         summary: product.rating?.summary || null,
-        pros: product.rating?.pros || [],
-        cons: product.rating?.cons || [],
+        pros: parseArray(product.rating?.pros),
+        cons: parseArray(product.rating?.cons),
         sourcesAnalyzed: product.rating?.sourcesAnalyzed || 0,
         sources: product.reviewSources.map((s) => ({
           type: s.sourceType,
           name: s.sourceName,
           url: s.sourceUrl,
           sentiment: s.extractedSentiment ? Number(s.extractedSentiment) : null,
-          pros: s.extractedPros,
-          cons: s.extractedCons,
+          pros: parseArray(s.extractedPros),
+          cons: parseArray(s.extractedCons),
           upvotes: s.upvotes,
           scrapedAt: s.scrapedAt,
         })),
       };
-    }
+    },
   );
 }

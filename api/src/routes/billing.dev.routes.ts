@@ -1,9 +1,10 @@
 // Development billing routes - mocked Stripe
 import { FastifyInstance } from 'fastify';
-import { authMiddleware, DEV_USER_ID } from '../middleware/auth.dev.js';
 import { prisma } from '../config/prisma.js';
+import { RouteDeps } from './deps.js';
 
-export async function devBillingRoutes(fastify: FastifyInstance) {
+export async function devBillingRoutes(fastify: FastifyInstance, deps: RouteDeps) {
+  const { authMiddleware } = deps;
   // Get available plans
   fastify.get('/plans', async () => {
     return {

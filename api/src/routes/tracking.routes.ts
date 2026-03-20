@@ -1,8 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
-import { optionalAuthMiddleware } from '../middleware/auth.middleware.js';
-import { env } from '../config/env.js';
+import { isPostgres, formatJson } from '../utils/db-helpers.js';
+import { RouteDeps } from './deps.js';
 
 // Affiliate network configurations
 const AFFILIATE_CONFIGS: Record<
@@ -17,15 +17,22 @@ const AFFILIATE_CONFIGS: Record<
     name: 'Amazon Associates',
     urlPattern: /amazon\.(com|co\.uk|de|fr|es|it|ca|com\.au)/,
     buildUrl: (url, tag) => {
-      const parsed = new URL(url);
-      parsed.searchParams.set('tag', tag);
-      return parsed.toString();
+      try {
+        const parsed = new URL(url);
+        parsed.searchParams.set('tag', tag);
+        return parsed.toString();
+      } catch {
+        return url;
+      }
     },
   },
-  // Add more affiliate networks as needed
 };
 
-export async function trackingRoutes(fastify: FastifyInstance) {
+const AMAZON_AFFILIATE_TAG = process.env.AMAZON_AFFILIATE_TAG || 'shopii-20';
+
+export async function trackingRoutes(fastify: FastifyInstance, deps: RouteDeps) {
+  const { optionalAuthMiddleware } = deps;
+
   // Track affiliate click
   fastify.post(
     '/click',
@@ -34,8 +41,8 @@ export async function trackingRoutes(fastify: FastifyInstance) {
     },
     async (request, reply) => {
       const bodySchema = z.object({
-        productId: z.string().uuid(),
-        clickUrl: z.string().url(),
+        productId: isPostgres ? z.string().uuid() : z.string(),
+        clickUrl: isPostgres ? z.string().url() : z.string(),
       });
 
       const parseResult = bodySchema.safeParse(request.body);
@@ -59,7 +66,6 @@ export async function trackingRoutes(fastify: FastifyInstance) {
         }
       }
 
-      // Record the click
       await prisma.affiliateClick.create({
         data: {
           userId,
@@ -69,23 +75,22 @@ export async function trackingRoutes(fastify: FastifyInstance) {
         },
       });
 
-      // Track as user interaction if authenticated
       if (userId) {
         await prisma.userInteraction.create({
           data: {
             userId,
             productId,
             interactionType: 'click_affiliate',
-            context: {
+            context: formatJson({
               url: clickUrl,
               network: affiliateNetwork,
-            },
+            }) as any,
           },
         });
       }
 
       return { success: true };
-    }
+    },
   );
 
   // Track ad impression
@@ -96,7 +101,7 @@ export async function trackingRoutes(fastify: FastifyInstance) {
     },
     async (request, reply) => {
       const bodySchema = z.object({
-        sponsoredProductId: z.string().uuid(),
+        sponsoredProductId: isPostgres ? z.string().uuid() : z.string(),
         placement: z.enum(['suggestions_feed', 'chat_results']),
       });
 
@@ -121,7 +126,7 @@ export async function trackingRoutes(fastify: FastifyInstance) {
       });
 
       return { success: true };
-    }
+    },
   );
 
   // Generate affiliate URL for a product
@@ -133,13 +138,14 @@ export async function trackingRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const { productId } = request.params as { productId: string };
 
-      // Validate UUID
-      const uuidSchema = z.string().uuid();
-      if (!uuidSchema.safeParse(productId).success) {
-        return reply.status(400).send({
-          error: 'Bad Request',
-          message: 'Invalid product ID',
-        });
+      if (isPostgres) {
+        const uuidSchema = z.string().uuid();
+        if (!uuidSchema.safeParse(productId).success) {
+          return reply.status(400).send({
+            error: 'Bad Request',
+            message: 'Invalid product ID',
+          });
+        }
       }
 
       const product = await prisma.product.findUnique({
@@ -157,24 +163,20 @@ export async function trackingRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Build affiliate URL with tracking tag
       let finalUrl = product.affiliateUrl;
-
-      // Check if it's an Amazon URL
       if (AFFILIATE_CONFIGS.amazon?.urlPattern.test(product.affiliateUrl)) {
-        finalUrl = AFFILIATE_CONFIGS.amazon.buildUrl(product.affiliateUrl, env.AMAZON_AFFILIATE_TAG);
+        finalUrl = AFFILIATE_CONFIGS.amazon.buildUrl(product.affiliateUrl, AMAZON_AFFILIATE_TAG);
       }
 
       return {
         url: finalUrl,
         retailer: product.retailer,
       };
-    }
+    },
   );
 
-  // Get click stats (internal/admin use)
-  fastify.get('/stats', async (request, reply) => {
-    // This would typically be protected by admin auth
+  // Get click stats
+  fastify.get('/stats', async (request) => {
     const querySchema = z.object({
       days: z.coerce.number().min(1).max(90).default(7),
     });
@@ -182,30 +184,53 @@ export async function trackingRoutes(fastify: FastifyInstance) {
     const { days } = querySchema.parse(request.query);
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-    const stats = await prisma.affiliateClick.groupBy({
-      by: ['affiliateNetwork'],
-      where: {
-        createdAt: { gte: startDate },
-      },
-      _count: true,
-    });
+    if (isPostgres) {
+      const stats = await prisma.affiliateClick.groupBy({
+        by: ['affiliateNetwork'],
+        where: {
+          createdAt: { gte: startDate },
+        },
+        _count: true,
+      });
 
-    const dailyStats = await prisma.$queryRaw`
-      SELECT
-        DATE(created_at) as date,
-        COUNT(*) as clicks
-      FROM affiliate_clicks
-      WHERE created_at >= ${startDate}
-      GROUP BY DATE(created_at)
-      ORDER BY date DESC
-    `;
+      const dailyStats = await prisma.$queryRaw`
+        SELECT
+          DATE(created_at) as date,
+          COUNT(*) as clicks
+        FROM affiliate_clicks
+        WHERE created_at >= ${startDate}
+        GROUP BY DATE(created_at)
+        ORDER BY date DESC
+      `;
 
-    return {
-      byNetwork: stats.map((s) => ({
-        network: s.affiliateNetwork,
-        clicks: s._count,
-      })),
-      daily: dailyStats,
-    };
+      return {
+        byNetwork: stats.map((s) => ({
+          network: s.affiliateNetwork,
+          clicks: s._count,
+        })),
+        daily: dailyStats,
+      };
+    } else {
+      // SQLite: fetch and aggregate in memory
+      const clicks = await prisma.affiliateClick.findMany({
+        where: { createdAt: { gte: startDate } },
+        orderBy: { createdAt: 'desc' },
+        take: 1000,
+      });
+
+      const byNetwork: Record<string, number> = {};
+      for (const click of clicks) {
+        const network = click.affiliateNetwork || 'unknown';
+        byNetwork[network] = (byNetwork[network] || 0) + 1;
+      }
+
+      return {
+        totalClicks: clicks.length,
+        byNetwork: Object.entries(byNetwork).map(([network, count]) => ({
+          network,
+          clicks: count,
+        })),
+      };
+    }
   });
 }

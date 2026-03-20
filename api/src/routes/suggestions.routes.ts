@@ -1,9 +1,11 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
-import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth.middleware.js';
+import { parseArray } from '../utils/db-helpers.js';
+import { RouteDeps } from './deps.js';
 
-export async function suggestionsRoutes(fastify: FastifyInstance) {
+export async function suggestionsRoutes(fastify: FastifyInstance, deps: RouteDeps) {
+  const { optionalAuthMiddleware } = deps;
   // Get personalized suggestions feed
   fastify.get(
     '/',
@@ -48,16 +50,18 @@ export async function suggestionsRoutes(fastify: FastifyInstance) {
       // Build query based on preferences
       const where: any = {};
 
-      if (preferences?.categories && preferences.categories.length > 0) {
-        where.category = { in: preferences.categories };
+      const cats = parseArray(preferences?.categories);
+      if (cats.length > 0) {
+        where.category = { in: cats };
       }
 
       if (preferences?.budgetMax) {
         where.currentPrice = { lte: preferences.budgetMax };
       }
 
-      if (preferences?.brandExclusions && preferences.brandExclusions.length > 0) {
-        where.brand = { notIn: preferences.brandExclusions };
+      const exclusions = parseArray(preferences?.brandExclusions);
+      if (exclusions.length > 0) {
+        where.brand = { notIn: exclusions };
       }
 
       // Get organic products
@@ -149,8 +153,8 @@ export async function suggestionsRoutes(fastify: FastifyInstance) {
           },
           aiRating: p.rating?.aiRating || null,
           confidence: p.rating?.confidence ? Number(p.rating.confidence) : null,
-          pros: p.rating?.pros || [],
-          cons: p.rating?.cons || [],
+          pros: parseArray(p.rating?.pros),
+          cons: parseArray(p.rating?.cons),
           affiliateUrl: p.affiliateUrl,
           retailer: p.retailer,
           isSponsored: p.isSponsored,
@@ -186,7 +190,7 @@ export async function suggestionsRoutes(fastify: FastifyInstance) {
         const preferences = await prisma.userPreferences.findUnique({
           where: { userId },
         });
-        categories = preferences?.categories || [];
+        categories = parseArray(preferences?.categories);
       }
 
       // Find products with most recent interactions
@@ -226,8 +230,8 @@ export async function suggestionsRoutes(fastify: FastifyInstance) {
           },
           aiRating: p.rating?.aiRating || null,
           confidence: p.rating?.confidence ? Number(p.rating.confidence) : null,
-          pros: p.rating?.pros || [],
-          cons: p.rating?.cons || [],
+          pros: parseArray(p.rating?.pros),
+          cons: parseArray(p.rating?.cons),
           affiliateUrl: p.affiliateUrl,
           retailer: p.retailer,
           recentInteractions: p._count.interactions,
