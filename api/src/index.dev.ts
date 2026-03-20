@@ -5,14 +5,19 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { prisma } from './config/prisma.js';
 import { redis } from './config/redis.mock.js';
+import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.dev.js';
+import type { RouteDeps } from './routes/deps.js';
 
-// Import dev-specific routes (all routes adapted for SQLite/mock services)
+// Unified routes (products, users, tracking work for both dev and prod)
+import { productsRoutes } from './routes/products.routes.js';
+import { usersRoutes } from './routes/users.routes.js';
+import { trackingRoutes } from './routes/tracking.routes.js';
+
+// Dev-specific routes (fundamentally different implementations)
 import { devAuthRoutes } from './routes/auth.dev.routes.js';
-import { devUsersRoutes } from './routes/users.dev.routes.js';
 import { devChatRoutes } from './routes/chat.dev.routes.js';
-import { devProductsRoutes } from './routes/products.dev.routes.js';
 import { devSuggestionsRoutes } from './routes/suggestions.dev.routes.js';
-import { devTrackingRoutes } from './routes/tracking.dev.routes.js';
+import { devBillingRoutes } from './routes/billing.dev.routes.js';
 
 const PORT = parseInt(process.env.PORT || '3001');
 const HOST = process.env.HOST || '0.0.0.0';
@@ -51,13 +56,17 @@ fastify.get('/', async () => {
   };
 });
 
-// Register all dev routes (adapted for SQLite/mock services)
-await fastify.register(devAuthRoutes, { prefix: '/api/auth' });
-await fastify.register(devUsersRoutes, { prefix: '/api/users' });
-await fastify.register(devChatRoutes, { prefix: '/api/chat' });
-await fastify.register(devProductsRoutes, { prefix: '/api/products' });
-await fastify.register(devSuggestionsRoutes, { prefix: '/api/suggestions' });
-await fastify.register(devTrackingRoutes, { prefix: '/api/tracking' });
+// Inject dev auth middleware into all routes via RouteDeps
+const routeDeps: RouteDeps = { authMiddleware, optionalAuthMiddleware };
+
+// Register routes — unified files reuse the same code for dev and prod
+await fastify.register(devAuthRoutes, { prefix: '/api/auth', ...routeDeps });
+await fastify.register(usersRoutes, { prefix: '/api/users', ...routeDeps });
+await fastify.register(devChatRoutes, { prefix: '/api/chat', ...routeDeps });
+await fastify.register(productsRoutes, { prefix: '/api/products', ...routeDeps });
+await fastify.register(devSuggestionsRoutes, { prefix: '/api/suggestions', ...routeDeps });
+await fastify.register(trackingRoutes, { prefix: '/api/tracking', ...routeDeps });
+await fastify.register(devBillingRoutes, { prefix: '/api/billing', ...routeDeps });
 
 // Error handler
 fastify.setErrorHandler((error, request, reply) => {
@@ -97,14 +106,14 @@ try {
   fastify.log.info(`
 ╔══════════════════════════════════════════════════════════════╗
 ║                                                              ║
-║   🛍️  Shopii API - DEVELOPMENT MODE                          ║
+║   Shopii API - DEVELOPMENT MODE                              ║
 ║                                                              ║
 ║   Server: http://${HOST}:${PORT}                             ║
 ║                                                              ║
-║   ✓ Real GPT-4o-mini AI responses                            ║
-║   ✓ Mock authentication (auto-login as dev user)             ║
-║   ✓ In-memory rate limiting (no Redis needed)                ║
-║   ✓ SQLite database (no PostgreSQL needed)                   ║
+║   Real GPT-4o-mini AI responses                              ║
+║   Mock authentication (auto-login as dev user)               ║
+║   In-memory rate limiting (no Redis needed)                  ║
+║   SQLite database (no PostgreSQL needed)                     ║
 ║                                                              ║
 ║   Test endpoints:                                            ║
 ║   - GET  /health                                             ║

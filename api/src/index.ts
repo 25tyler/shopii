@@ -8,12 +8,16 @@ import rateLimit from '@fastify/rate-limit';
 import { env } from './config/env.js';
 import { redis } from './config/redis.js';
 import { prisma } from './config/prisma.js';
+import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.middleware.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { usersRoutes } from './routes/users.routes.js';
 import { chatRoutes } from './routes/chat.routes.js';
 import { productsRoutes } from './routes/products.routes.js';
 import { suggestionsRoutes } from './routes/suggestions.routes.js';
 import { trackingRoutes } from './routes/tracking.routes.js';
+import type { RouteDeps } from './routes/deps.js';
+
+const routeDeps: RouteDeps = { authMiddleware, optionalAuthMiddleware };
 
 const fastify = Fastify({
   logger: {
@@ -68,13 +72,13 @@ fastify.get('/', async () => {
   };
 });
 
-// Register routes
-await fastify.register(authRoutes, { prefix: '/api/auth' });
-await fastify.register(usersRoutes, { prefix: '/api/users' });
-await fastify.register(chatRoutes, { prefix: '/api/chat' });
-await fastify.register(productsRoutes, { prefix: '/api/products' });
-await fastify.register(suggestionsRoutes, { prefix: '/api/suggestions' });
-await fastify.register(trackingRoutes, { prefix: '/api/tracking' });
+// Register routes — all route files receive RouteDeps for middleware injection
+await fastify.register(authRoutes, { prefix: '/api/auth', ...routeDeps });
+await fastify.register(usersRoutes, { prefix: '/api/users', ...routeDeps });
+await fastify.register(chatRoutes, { prefix: '/api/chat', ...routeDeps });
+await fastify.register(productsRoutes, { prefix: '/api/products', ...routeDeps });
+await fastify.register(suggestionsRoutes, { prefix: '/api/suggestions', ...routeDeps });
+await fastify.register(trackingRoutes, { prefix: '/api/tracking', ...routeDeps });
 
 // Error handler
 fastify.setErrorHandler((error, request, reply) => {

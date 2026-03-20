@@ -1,11 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../config/prisma.js';
-import { authMiddleware } from '../middleware/auth.middleware.js';
-import { getUsageStats } from '../middleware/rateLimit.middleware.js';
+import { isPostgres, parseArray, formatArray, formatJson } from '../utils/db-helpers.js';
 import { UpdatePreferencesRequestSchema } from '../types/index.js';
 import { z } from 'zod';
+import { RouteDeps } from './deps.js';
 
-export async function usersRoutes(fastify: FastifyInstance) {
+export async function usersRoutes(fastify: FastifyInstance, deps: RouteDeps) {
+  const { authMiddleware } = deps;
+
   // Get user preferences
   fastify.get(
     '/preferences',
@@ -20,7 +22,6 @@ export async function usersRoutes(fastify: FastifyInstance) {
       });
 
       if (!preferences) {
-        // Return defaults if no preferences exist
         return {
           categories: [],
           budgetMin: 0,
@@ -33,15 +34,15 @@ export async function usersRoutes(fastify: FastifyInstance) {
       }
 
       return {
-        categories: preferences.categories,
+        categories: parseArray(preferences.categories),
         budgetMin: preferences.budgetMin,
         budgetMax: preferences.budgetMax,
         currency: preferences.currency,
         qualityPreference: preferences.qualityPreference,
-        brandPreferences: preferences.brandPreferences,
-        brandExclusions: preferences.brandExclusions,
+        brandPreferences: parseArray(preferences.brandPreferences),
+        brandExclusions: parseArray(preferences.brandExclusions),
       };
-    }
+    },
   );
 
   // Update user preferences
@@ -53,7 +54,6 @@ export async function usersRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const user = request.user!;
 
-      // Validate request body
       const parseResult = UpdatePreferencesRequestSchema.safeParse(request.body);
       if (!parseResult.success) {
         return reply.status(400).send({
@@ -65,7 +65,6 @@ export async function usersRoutes(fastify: FastifyInstance) {
 
       const updates = parseResult.data;
 
-      // Validate budget range
       if (updates.budgetMin !== undefined && updates.budgetMax !== undefined) {
         if (updates.budgetMin > updates.budgetMax) {
           return reply.status(400).send({
@@ -78,7 +77,9 @@ export async function usersRoutes(fastify: FastifyInstance) {
       const preferences = await prisma.userPreferences.upsert({
         where: { userId: user.id },
         update: {
-          ...(updates.categories !== undefined && { categories: updates.categories }),
+          ...(updates.categories !== undefined && {
+            categories: formatArray(updates.categories) as any,
+          }),
           ...(updates.budgetMin !== undefined && { budgetMin: updates.budgetMin }),
           ...(updates.budgetMax !== undefined && { budgetMax: updates.budgetMax }),
           ...(updates.currency !== undefined && { currency: updates.currency }),
@@ -86,32 +87,34 @@ export async function usersRoutes(fastify: FastifyInstance) {
             qualityPreference: updates.qualityPreference,
           }),
           ...(updates.brandPreferences !== undefined && {
-            brandPreferences: updates.brandPreferences,
+            brandPreferences: formatArray(updates.brandPreferences) as any,
           }),
-          ...(updates.brandExclusions !== undefined && { brandExclusions: updates.brandExclusions }),
+          ...(updates.brandExclusions !== undefined && {
+            brandExclusions: formatArray(updates.brandExclusions) as any,
+          }),
         },
         create: {
           userId: user.id,
-          categories: updates.categories || [],
+          categories: formatArray(updates.categories || []) as any,
           budgetMin: updates.budgetMin || 0,
           budgetMax: updates.budgetMax || 1000,
           currency: updates.currency || 'USD',
           qualityPreference: updates.qualityPreference || 'mid-range',
-          brandPreferences: updates.brandPreferences || [],
-          brandExclusions: updates.brandExclusions || [],
+          brandPreferences: formatArray(updates.brandPreferences || []) as any,
+          brandExclusions: formatArray(updates.brandExclusions || []) as any,
         },
       });
 
       return {
-        categories: preferences.categories,
+        categories: parseArray(preferences.categories),
         budgetMin: preferences.budgetMin,
         budgetMax: preferences.budgetMax,
         currency: preferences.currency,
         qualityPreference: preferences.qualityPreference,
-        brandPreferences: preferences.brandPreferences,
-        brandExclusions: preferences.brandExclusions,
+        brandPreferences: parseArray(preferences.brandPreferences),
+        brandExclusions: parseArray(preferences.brandExclusions),
       };
-    }
+    },
   );
 
   // Get usage stats
@@ -122,8 +125,22 @@ export async function usersRoutes(fastify: FastifyInstance) {
     },
     async (request) => {
       const user = request.user!;
-      return getUsageStats(user.id, user.plan);
-    }
+
+      try {
+        const { getUsageStats } = await import('../middleware/rateLimit.middleware.js');
+        return getUsageStats(user.id, user.plan);
+      } catch {
+        // Fallback for dev mode (no real Redis-based tracking)
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(0, 0, 0, 0);
+        return {
+          searchCount: 0,
+          limit: user.plan === 'pro' ? -1 : 50,
+          resetAt: tomorrow,
+        };
+      }
+    },
   );
 
   // Track user interaction
@@ -136,7 +153,7 @@ export async function usersRoutes(fastify: FastifyInstance) {
       const user = request.user!;
 
       const bodySchema = z.object({
-        productId: z.string().uuid().optional(),
+        productId: isPostgres ? z.string().uuid().optional() : z.string().optional(),
         interactionType: z.enum(['view', 'click_affiliate', 'save', 'dismiss']),
         context: z.record(z.unknown()).optional(),
       });
@@ -157,12 +174,12 @@ export async function usersRoutes(fastify: FastifyInstance) {
           userId: user.id,
           productId,
           interactionType,
-          context: context || null,
+          context: context ? (formatJson(context) as any) : null,
         },
       });
 
       return { success: true };
-    }
+    },
   );
 
   // Get user's favorite products
@@ -187,7 +204,7 @@ export async function usersRoutes(fastify: FastifyInstance) {
       });
 
       return favorites;
-    }
+    },
   );
 
   // Add product to favorites
@@ -200,7 +217,7 @@ export async function usersRoutes(fastify: FastifyInstance) {
       const user = request.user!;
 
       const bodySchema = z.object({
-        productId: z.string().uuid(),
+        productId: isPostgres ? z.string().uuid() : z.string(),
       });
 
       const parseResult = bodySchema.safeParse(request.body);
@@ -214,7 +231,6 @@ export async function usersRoutes(fastify: FastifyInstance) {
 
       const { productId } = parseResult.data;
 
-      // Check if product exists
       const product = await prisma.product.findUnique({
         where: { id: productId },
       });
@@ -226,7 +242,6 @@ export async function usersRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Check if already favorited
       const existing = await prisma.favoriteProduct.findUnique({
         where: {
           userId_productId: {
@@ -248,7 +263,7 @@ export async function usersRoutes(fastify: FastifyInstance) {
       });
 
       return { success: true, favorite };
-    }
+    },
   );
 
   // Remove product from favorites
@@ -261,7 +276,7 @@ export async function usersRoutes(fastify: FastifyInstance) {
       const user = request.user!;
 
       const paramsSchema = z.object({
-        productId: z.string().uuid(),
+        productId: isPostgres ? z.string().uuid() : z.string(),
       });
 
       const parseResult = paramsSchema.safeParse(request.params);
@@ -282,6 +297,6 @@ export async function usersRoutes(fastify: FastifyInstance) {
       });
 
       return { success: true };
-    }
+    },
   );
 }

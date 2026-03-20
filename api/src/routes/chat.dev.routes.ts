@@ -2,7 +2,7 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
-import { authMiddleware } from '../middleware/auth.dev.js';
+import { RouteDeps } from './deps.js';
 import { generateChatResponse, generateResearchBasedResponse, detectIntent } from '../services/ai.openai.js';
 import { conductProductResearch, enrichProducts } from '../services/research.service.js';
 import { extractProductsFromResearch, enhanceProductsWithEnrichment, ExtractedProduct, lookupProductUrl, estimateProductPrice } from '../services/product-extraction.service.js';
@@ -65,7 +65,8 @@ const ChatMessageRequestSchema = z.object({
   })).optional(),
 });
 
-export async function devChatRoutes(fastify: FastifyInstance) {
+export async function devChatRoutes(fastify: FastifyInstance, deps: RouteDeps) {
+  const { authMiddleware } = deps;
   // Send a message and get AI response
   fastify.post(
     '/message',
