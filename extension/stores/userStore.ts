@@ -27,8 +27,9 @@ interface UserState {
   fetchUserData: () => Promise<void>;
 }
 
-const GUEST_SEARCH_LIMIT = 5;
-const FREE_SEARCH_LIMIT = 15;
+// Client-side UX guidance — should match API rate limits in rateLimit.middleware.ts
+const GUEST_SEARCH_LIMIT = 20;
+const FREE_SEARCH_LIMIT = 50;
 
 export const useUserStore = create<UserState>((set, get) => ({
   user: null,
