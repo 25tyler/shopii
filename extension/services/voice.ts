@@ -2,7 +2,7 @@
  * Voice service for speech-to-text using Wispr Flow API
  */
 
-const WISPR_API_KEY = import.meta.env.VITE_WHISPER_FLOW_API_KEY || 'fl-b4bc98aff5f372b3e7ecd38a58de60f2';
+const WISPR_API_KEY = import.meta.env.VITE_WHISPER_FLOW_API_KEY || '';
 const WISPR_API_ENDPOINT = 'https://platform-api.wisprflow.ai/api/v1/dash/api';
 
 export interface VoiceRecordingResult {
@@ -140,13 +140,9 @@ export class VoiceService {
         }
       };
 
-      console.log('Sending transcription request to Wispr Flow...');
-      console.log('Endpoint:', WISPR_API_ENDPOINT);
-      console.log('Audio size (base64):', base64Audio.length, 'characters');
-      console.log('Full API Key:', WISPR_API_KEY);
-      console.log('API Key from env:', import.meta.env.VITE_WHISPER_FLOW_API_KEY);
-      console.log('API Key length:', WISPR_API_KEY.length);
-      console.log('Authorization header:', `Bearer ${WISPR_API_KEY}`);
+      if (!WISPR_API_KEY) {
+        throw new Error('Voice transcription is not configured — set VITE_WHISPER_FLOW_API_KEY');
+      }
 
       const response = await fetch(WISPR_API_ENDPOINT, {
         method: 'POST',
