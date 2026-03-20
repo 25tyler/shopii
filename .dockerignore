@@ -1,0 +1,6 @@
+.git
+.github
+*.md
+.env*
+extension/
+CLAUDE.md

@@ -1,0 +1,12 @@
+node_modules
+dist
+*.env
+.env.*
+prisma/dev.db
+prisma/schema.dev.prisma
+.git
+.gitignore
+README.md
+vitest.config.*
+src/**/*.test.ts
+src/**/*.spec.ts

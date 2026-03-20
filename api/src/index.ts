@@ -54,9 +54,35 @@ await fastify.register(rateLimit, {
   redis,
 });
 
-// Health check endpoint
+// Liveness probe — lightweight, always responds if process is up
 fastify.get('/health', async () => {
   return { status: 'ok', timestamp: new Date().toISOString() };
+});
+
+// Readiness probe — checks database and Redis connectivity
+fastify.get('/health/ready', async (_request, reply) => {
+  const checks: Record<string, 'ok' | 'error'> = {};
+
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    checks.database = 'ok';
+  } catch {
+    checks.database = 'error';
+  }
+
+  try {
+    await redis.ping();
+    checks.redis = 'ok';
+  } catch {
+    checks.redis = 'error';
+  }
+
+  const allOk = Object.values(checks).every((v) => v === 'ok');
+  return reply.status(allOk ? 200 : 503).send({
+    status: allOk ? 'ready' : 'degraded',
+    checks,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // API info endpoint
